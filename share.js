@@ -1,6 +1,6 @@
 // Native device sharing for Gathered.
 (() => {
-  const SHARE_TEXT = 'Check out Gathered to journal and record prayer requests from your small group meetings.';
+  const SHARE_TEXT = 'Check out Gathered to journal and record prayer requests from your small group meetings. Try it at https://gatheredapp.github.io/Gathered/';
 
   if (Array.isArray(APP_ASSETS) && !APP_ASSETS.includes('share.js')) APP_ASSETS.push('share.js');
 
