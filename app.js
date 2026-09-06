@@ -60,14 +60,14 @@ function initials(name='') { return name.split(/\s+/).filter(Boolean).slice(0,2)
 function daysSince(iso) { if (!iso) return Infinity; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 
 function defaultState() {
-  return { version:2, group:null, members:[], entries:[], prayers:[], followUps:[], settings:{ translation:'NIV', lastBackupAt:null } };
+  return { version:4, group:null, members:[], entries:[], prayers:[], followUps:[], settings:{ translation:'NIV', lastBackupAt:null } };
 }
 
 function migrateState(raw) {
   const base = defaultState();
   if (!raw || typeof raw !== 'object') return base;
-  if (raw.version === 2 && Array.isArray(raw.prayers) && Array.isArray(raw.followUps)) {
-    return { ...base, ...raw, settings:{...base.settings,...(raw.settings||{})} };
+  if (raw.version >= 2 && Array.isArray(raw.prayers) && Array.isArray(raw.followUps)) {
+    return { ...base, ...raw, version:4, entries:(Array.isArray(raw.entries)?raw.entries:[]).map(e=>({...e,sessionType:e.sessionType||'small-group',status:e.status||'completed'})), settings:{...base.settings,...(raw.settings||{})} };
   }
   const migrated = { ...base, group:raw.group||null, members:Array.isArray(raw.members)?raw.members:[], settings:{...base.settings,...(raw.settings||{})} };
   for (const oldEntry of Array.isArray(raw.entries)?raw.entries:[]) {
@@ -81,7 +81,7 @@ function migrateState(raw) {
         updates:[], answeredDate:p.status==='answered'?(oldEntry.date||todayISO()):'', createdAt:oldEntry.createdAt||new Date().toISOString(), updatedAt:oldEntry.updatedAt||new Date().toISOString()
       });
     }
-    migrated.entries.push({ ...oldEntry, prayers:undefined, prayerIds, followUpIds:[] });
+    migrated.entries.push({ ...oldEntry, prayers:undefined, prayerIds, followUpIds:[], sessionType:oldEntry.sessionType||'small-group', status:oldEntry.status||'completed' });
   }
   return migrated;
 }
@@ -99,20 +99,11 @@ async function dbDelete(key) { const db=await openDB(); return new Promise((reso
 
 let state=defaultState();
 async function loadState() {
-  try {
-    const stored=await dbGet(STATE_KEY);
-    if (stored) return migrateState(stored);
-    const legacy=localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) {
-      const migrated=migrateState(JSON.parse(legacy));
-      await dbPut(STATE_KEY,migrated);
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      return migrated;
-    }
-  } catch (e) { console.error('State load failed',e); }
+  // Replaced at startup by crypto.js. Keeping this safe default prevents a
+  // future loading-order mistake from writing user content in plaintext.
   return defaultState();
 }
-async function saveState() { state.version=2; await dbPut(STATE_KEY,state); }
+async function saveState() { throw new Error('Encrypted persistence has not initialized'); }
 
 function getMemberNameFrom(members,id,fallback='General') { return members.find(m=>m.id===id)?.name || fallback; }
 function getMemberName(id,fallback='General') { return getMemberNameFrom(state.members,id,fallback); }
@@ -188,7 +179,7 @@ function bindEntryEditor(id){
     const previousFollowIds=existing?entryFollowUpIds(existing):[];const nextFollowIds=[];
     for(const row of followUpRows.querySelectorAll('.followup-row')){const text=row.querySelector('.followup-text').value.trim();if(!text)continue;const id=row.dataset.id||uid('follow'),memberId=row.querySelector('.followup-member').value,dueDate=row.querySelector('.followup-due').value,status=row.querySelector('.followup-status').value;const old=getFollowUp(id);const item={id,text,memberId,memberName:getMemberName(memberId,'Unassigned'),dueDate,status,createdEntryId:entryId,createdDate:old?.createdDate||date,completedAt:status==='completed'?(old?.completedAt||new Date().toISOString()):'',createdAt:old?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};if(old)state.followUps=state.followUps.map(x=>x.id===id?item:x);else state.followUps.push(item);nextFollowIds.push(id);}
     state.followUps=state.followUps.filter(f=>!previousFollowIds.includes(f.id)||nextFollowIds.includes(f.id));
-    const saved={id:entryId,date,scripture:scriptureVal,translation:translation.value,journal:document.getElementById('journal').value.trim(),prayerIds:[...new Set(touchedPrayerIds)],followUpIds:nextFollowIds,updatedAt:new Date().toISOString(),createdAt:existing?.createdAt||new Date().toISOString()};
+    const saved={id:entryId,sessionType:document.getElementById('sessionType')?.value||existing?.sessionType||'small-group',status:'completed',date,scripture:scriptureVal,translation:translation.value,journal:document.getElementById('journal').value.trim(),prayerIds:[...new Set(touchedPrayerIds)],followUpIds:nextFollowIds,updatedAt:new Date().toISOString(),createdAt:existing?.createdAt||new Date().toISOString()};
     if(existing)state.entries=state.entries.map(x=>x.id===existing.id?saved:x);else state.entries.push(saved);state.settings.translation=translation.value;await saveState();toast('Session saved');location.hash=`#entry/${saved.id}`;render();
   };
   if(existing)document.getElementById('deleteEntry').onclick=async()=>{if(confirm('Delete this session? Prayer histories will remain, but this session link will be removed.')){state.entries=state.entries.filter(x=>x.id!==existing.id);state.followUps=state.followUps.filter(f=>f.createdEntryId!==existing.id);state.prayers.forEach(p=>{p.updates=(p.updates||[]).filter(u=>u.entryId!==existing.id);if(p.createdEntryId===existing.id)p.createdEntryId='';});await saveState();location.hash='#entries';render();}};
