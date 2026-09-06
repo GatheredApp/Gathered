@@ -14,6 +14,18 @@
 </head>
 <body>
   <div id="app"></div>
+  <div class="update-modal" id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateTitle" aria-describedby="updateDescription" hidden>
+    <div class="update-modal-card">
+      <div class="update-modal-icon" aria-hidden="true">↻</div>
+      <div>
+        <div class="eyebrow">Update available</div>
+        <h2 id="updateTitle">A new version of Gathered is ready.</h2>
+        <p class="subtle" id="updateDescription">Update now to get the latest improvements. Your journal data will stay safely on this device.</p>
+      </div>
+      <button class="btn primary block" id="installUpdate" type="button">Update App</button>
+      <button class="btn ghost block" id="dismissUpdate" type="button">Not now</button>
+    </div>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js" defer></script>
   <script src="standalone-prayers.js" defer></script>

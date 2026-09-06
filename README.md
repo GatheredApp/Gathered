@@ -19,6 +19,7 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 - Full prayer-request editing and permanent deletion, including reference cleanup, alongside individual update editing/deletion
 - Backup-age reminder and last-backup status
 - Offline-capable service worker with network-first same-origin refresh behavior
+- Automatic service-worker version detection with an in-app update prompt
 - Settings **Update App** action that clears cached application files and re-downloads the latest deployed repository files while preserving IndexedDB data
 - Installable PWA manifest
 
