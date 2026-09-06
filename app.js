@@ -60,14 +60,14 @@ function initials(name='') { return name.split(/\s+/).filter(Boolean).slice(0,2)
 function daysSince(iso) { if (!iso) return Infinity; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 
 function defaultState() {
-  return { version:2, group:null, members:[], entries:[], prayers:[], followUps:[], settings:{ translation:'NIV', lastBackupAt:null } };
+  return { version:4, group:null, members:[], entries:[], prayers:[], followUps:[], settings:{ translation:'NIV', lastBackupAt:null } };
 }
 
 function migrateState(raw) {
   const base = defaultState();
   if (!raw || typeof raw !== 'object') return base;
-  if (raw.version === 2 && Array.isArray(raw.prayers) && Array.isArray(raw.followUps)) {
-    return { ...base, ...raw, settings:{...base.settings,...(raw.settings||{})} };
+  if (raw.version >= 2 && Array.isArray(raw.prayers) && Array.isArray(raw.followUps)) {
+    return { ...base, ...raw, version:4, entries:(Array.isArray(raw.entries)?raw.entries:[]).map(e=>({...e,sessionType:e.sessionType||'small-group',status:e.status||'completed'})), settings:{...base.settings,...(raw.settings||{})} };
   }
   const migrated = { ...base, group:raw.group||null, members:Array.isArray(raw.members)?raw.members:[], settings:{...base.settings,...(raw.settings||{})} };
   for (const oldEntry of Array.isArray(raw.entries)?raw.entries:[]) {
@@ -81,7 +81,7 @@ function migrateState(raw) {
         updates:[], answeredDate:p.status==='answered'?(oldEntry.date||todayISO()):'', createdAt:oldEntry.createdAt||new Date().toISOString(), updatedAt:oldEntry.updatedAt||new Date().toISOString()
       });
     }
-    migrated.entries.push({ ...oldEntry, prayers:undefined, prayerIds, followUpIds:[] });
+    migrated.entries.push({ ...oldEntry, prayers:undefined, prayerIds, followUpIds:[], sessionType:oldEntry.sessionType||'small-group', status:oldEntry.status||'completed' });
   }
   return migrated;
 }
@@ -99,20 +99,11 @@ async function dbDelete(key) { const db=await openDB(); return new Promise((reso
 
 let state=defaultState();
 async function loadState() {
-  try {
-    const stored=await dbGet(STATE_KEY);
-    if (stored) return migrateState(stored);
-    const legacy=localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) {
-      const migrated=migrateState(JSON.parse(legacy));
-      await dbPut(STATE_KEY,migrated);
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      return migrated;
-    }
-  } catch (e) { console.error('State load failed',e); }
+  // Replaced at startup by crypto.js. Keeping this safe default prevents a
+  // future loading-order mistake from writing user content in plaintext.
   return defaultState();
 }
-async function saveState() { state.version=2; await dbPut(STATE_KEY,state); }
+async function saveState() { throw new Error('Encrypted persistence has not initialized'); }
 
 function getMemberNameFrom(members,id,fallback='General') { return members.find(m=>m.id===id)?.name || fallback; }
 function getMemberName(id,fallback='General') { return getMemberNameFrom(state.members,id,fallback); }
@@ -188,7 +179,7 @@ function bindEntryEditor(id){
     const previousFollowIds=existing?entryFollowUpIds(existing):[];const nextFollowIds=[];
     for(const row of followUpRows.querySelectorAll('.followup-row')){const text=row.querySelector('.followup-text').value.trim();if(!text)continue;const id=row.dataset.id||uid('follow'),memberId=row.querySelector('.followup-member').value,dueDate=row.querySelector('.followup-due').value,status=row.querySelector('.followup-status').value;const old=getFollowUp(id);const item={id,text,memberId,memberName:getMemberName(memberId,'Unassigned'),dueDate,status,createdEntryId:entryId,createdDate:old?.createdDate||date,completedAt:status==='completed'?(old?.completedAt||new Date().toISOString()):'',createdAt:old?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};if(old)state.followUps=state.followUps.map(x=>x.id===id?item:x);else state.followUps.push(item);nextFollowIds.push(id);}
     state.followUps=state.followUps.filter(f=>!previousFollowIds.includes(f.id)||nextFollowIds.includes(f.id));
-    const saved={id:entryId,date,scripture:scriptureVal,translation:translation.value,journal:document.getElementById('journal').value.trim(),prayerIds:[...new Set(touchedPrayerIds)],followUpIds:nextFollowIds,updatedAt:new Date().toISOString(),createdAt:existing?.createdAt||new Date().toISOString()};
+    const saved={id:entryId,sessionType:document.getElementById('sessionType')?.value||existing?.sessionType||'small-group',status:'completed',date,scripture:scriptureVal,translation:translation.value,journal:document.getElementById('journal').value.trim(),prayerIds:[...new Set(touchedPrayerIds)],followUpIds:nextFollowIds,updatedAt:new Date().toISOString(),createdAt:existing?.createdAt||new Date().toISOString()};
     if(existing)state.entries=state.entries.map(x=>x.id===existing.id?saved:x);else state.entries.push(saved);state.settings.translation=translation.value;await saveState();toast('Session saved');location.hash=`#entry/${saved.id}`;render();
   };
   if(existing)document.getElementById('deleteEntry').onclick=async()=>{if(confirm('Delete this session? Prayer histories will remain, but this session link will be removed.')){state.entries=state.entries.filter(x=>x.id!==existing.id);state.followUps=state.followUps.filter(f=>f.createdEntryId!==existing.id);state.prayers.forEach(p=>{p.updates=(p.updates||[]).filter(u=>u.entryId!==existing.id);if(p.createdEntryId===existing.id)p.createdEntryId='';});await saveState();location.hash='#entries';render();}};
@@ -218,5 +209,7 @@ async function forceAppUpdate(){if(!confirm('Update Gathered now? Cached app fil
 function bindSettings(){document.getElementById('defaultTranslation').onchange=async e=>{state.settings.translation=e.target.value;await saveState();toast('Default updated');};document.getElementById('renameGroup').onclick=async()=>{const n=prompt('Small group name',state.group.name);if(n?.trim()){state.group.name=n.trim();await saveState();render();}};document.getElementById('exportData').onclick=async()=>{await downloadBackup('backup',true);render();toast('Backup exported');};document.getElementById('importData').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text()),check=validateBackup(data);if(!check.valid)throw new Error(check.errors.join('\n'));const incoming=migrateState(data);if(confirm(`Import backup for “${incoming.group.name}”?\n\n${incoming.members.length} members · ${incoming.entries.length} sessions · ${incoming.prayers.length} prayers\n\nYour current Gathered data will be exported first.`)){await downloadBackup('pre-import',false);state=incoming;await saveState();location.hash='#home';render();toast('Backup restored');}}catch(err){alert(`That file is not a valid Gathered backup.\n\n${err.message||''}`);}};document.getElementById('updateApp').onclick=forceAppUpdate;document.getElementById('resetApp').onclick=async()=>{if(confirm('Reset Gathered? A safety backup will download first, then all local journal data will be deleted.')){await downloadBackup('pre-reset',false);await dbDelete(STATE_KEY);state=defaultState();location.hash='';render();}};}
 
 function render(){if(!state.group){renderOnboarding();return;}const route=(location.hash||'#home').slice(1),parts=route.split('/');if(parts[0]==='home')document.getElementById('app').innerHTML=homePage();else if(parts[0]==='entries')document.getElementById('app').innerHTML=entriesPage();else if(parts[0]==='prayers')document.getElementById('app').innerHTML=prayersPage();else if(parts[0]==='members')document.getElementById('app').innerHTML=membersPage();else if(parts[0]==='search'){document.getElementById('app').innerHTML=searchPage();bindSearch();}else if(parts[0]==='settings'){document.getElementById('app').innerHTML=settingsPage();bindSettings();}else if(parts[0]==='prayer')document.getElementById('app').innerHTML=prayerDetail(parts[1]);else if(parts[0]==='entry'){if(parts[1]==='new'||parts[2]==='edit'){const id=parts[1]==='new'?'new':parts[1];document.getElementById('app').innerHTML=entryEditor(id);bindEntryEditor(id);}else document.getElementById('app').innerHTML=entryDetail(parts[1]);}else if(parts[0]==='member'){if(parts[1]==='new'||parts[2]==='edit'){const id=parts[1]==='new'?'new':parts[1];document.getElementById('app').innerHTML=memberEditor(id);bindMemberEditor(id);}else document.getElementById('app').innerHTML=memberDetail(parts[1]);}else location.hash='#home';window.scrollTo(0,0);}
-window.addEventListener('hashchange',render);
+// Resolve `render` when navigation happens so enhancement modules loaded after
+// this file can safely extend routing (session type selection and drafts).
+window.addEventListener('hashchange',()=>render());
 window.addEventListener('DOMContentLoaded',async()=>{state=await loadState();render();if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(console.error);});
