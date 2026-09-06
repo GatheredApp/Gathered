@@ -4,6 +4,7 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
+const APP_VERSION = '1.5.0';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
@@ -206,10 +207,57 @@ async function downloadBackup(label='backup',mark=true){const snapshot={...state
 
 function settingsPage(){const last=state.settings.lastBackupAt?new Date(state.settings.lastBackupAt).toLocaleString():'Never';return shell(`<div class="page"><div class="hero"><div class="eyebrow">Gathered</div><h1>Settings</h1></div><div class="card flat"><div class="settings-row"><div><strong>Small group</strong><div class="subtle mini">${esc(state.group.name)}</div></div><button class="btn small ghost" id="renameGroup">Rename</button></div><div class="settings-row"><div><strong>Default translation</strong><div class="subtle mini">Used for new YouVersion links.</div></div><select class="select compact" id="defaultTranslation">${Object.keys(TRANSLATIONS).map(k=>`<option ${state.settings.translation===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="settings-row"><div><strong>Export backup</strong><div class="subtle mini">Last recorded backup: ${esc(last)}</div></div><button class="btn small secondary" id="exportData">Export</button></div><div class="settings-row"><div><strong>Import backup</strong><div class="subtle mini">Validates the file and exports your current data first.</div></div><label class="btn small ghost" for="importData">Import</label><input class="file-input" type="file" id="importData" accept="application/json,.json"></div><div class="settings-row"><div><strong>Update Gathered</strong><div class="subtle mini">Deletes cached app files and downloads the latest deployed files from the repository host. Your IndexedDB data is preserved.</div></div><button class="btn small secondary" id="updateApp">Update App</button></div><div class="settings-row"><div><strong>Reset app</strong><div class="subtle mini">Exports a safety backup, then deletes local Gathered data.</div></div><button class="btn small danger" id="resetApp">Reset</button></div></div><div class="notice section">Prayer requests can contain sensitive personal information. Gathered remains local-first and stores its primary data in IndexedDB on this device.</div></div>`,'');}
 async function forceAppUpdate(){if(!confirm('Update Gathered now? Cached app files will be removed and the latest deployed files will be downloaded. Your journal data will stay intact.'))return;const btn=document.getElementById('updateApp');btn.disabled=true;btn.textContent='Updating…';try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));}if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}const stamp=Date.now();await Promise.all(APP_ASSETS.map(path=>fetch(`${path}${path.includes('?')?'&':'?'}gathered_update=${stamp}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(`${path}: ${r.status}`);})));if('serviceWorker' in navigator)await navigator.serviceWorker.register(`./sw.js?gathered_update=${stamp}`);location.replace(`./?gathered_update=${stamp}#settings`);}catch(e){console.error(e);alert('Gathered could not complete the update. Check your connection and try again.');btn.disabled=false;btn.textContent='Update App';}}
+
+function showUpdateModal(){
+  const modal=document.getElementById('updateModal');
+  if(!modal||!modal.hidden)return;
+  modal.hidden=false;
+  document.getElementById('installUpdate')?.focus();
+}
+
+function serviceWorkerVersion(worker){
+  return new Promise(resolve=>{
+    if(!worker){resolve(null);return;}
+    const channel=new MessageChannel(),timeout=setTimeout(()=>resolve(null),2000);
+    channel.port1.onmessage=event=>{clearTimeout(timeout);resolve(event.data?.version||null);};
+    worker.postMessage({type:'GET_APP_VERSION'},[channel.port2]);
+  });
+}
+
+async function watchForAppUpdates(){
+  if(!('serviceWorker' in navigator))return;
+  const registration=await navigator.serviceWorker.register('./sw.js');
+  const checkVersion=async worker=>{
+    const installedVersion=await serviceWorkerVersion(worker);
+    if(installedVersion&&installedVersion!==APP_VERSION)showUpdateModal();
+  };
+  await navigator.serviceWorker.ready;
+  await checkVersion(registration.active||navigator.serviceWorker.controller);
+  registration.addEventListener('updatefound',()=>{
+    const worker=registration.installing;
+    worker?.addEventListener('statechange',()=>{
+      if(worker.state==='activated')checkVersion(worker);
+    });
+  });
+  navigator.serviceWorker.addEventListener('controllerchange',()=>checkVersion(navigator.serviceWorker.controller));
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')registration.update().catch(console.error);
+  });
+  registration.update().catch(console.error);
+}
+
+function bindUpdateModal(){
+  const modal=document.getElementById('updateModal'),install=document.getElementById('installUpdate');
+  document.getElementById('dismissUpdate')?.addEventListener('click',()=>{modal.hidden=true;});
+  install?.addEventListener('click',()=>{
+    install.disabled=true;install.textContent='Updating…';
+    location.reload();
+  });
+}
 function bindSettings(){document.getElementById('defaultTranslation').onchange=async e=>{state.settings.translation=e.target.value;await saveState();toast('Default updated');};document.getElementById('renameGroup').onclick=async()=>{const n=prompt('Small group name',state.group.name);if(n?.trim()){state.group.name=n.trim();await saveState();render();}};document.getElementById('exportData').onclick=async()=>{await downloadBackup('backup',true);render();toast('Backup exported');};document.getElementById('importData').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text()),check=validateBackup(data);if(!check.valid)throw new Error(check.errors.join('\n'));const incoming=migrateState(data);if(confirm(`Import backup for “${incoming.group.name}”?\n\n${incoming.members.length} members · ${incoming.entries.length} sessions · ${incoming.prayers.length} prayers\n\nYour current Gathered data will be exported first.`)){await downloadBackup('pre-import',false);state=incoming;await saveState();location.hash='#home';render();toast('Backup restored');}}catch(err){alert(`That file is not a valid Gathered backup.\n\n${err.message||''}`);}};document.getElementById('updateApp').onclick=forceAppUpdate;document.getElementById('resetApp').onclick=async()=>{if(confirm('Reset Gathered? A safety backup will download first, then all local journal data will be deleted.')){await downloadBackup('pre-reset',false);await dbDelete(STATE_KEY);state=defaultState();location.hash='';render();}};}
 
 function render(){if(!state.group){renderOnboarding();return;}const route=(location.hash||'#home').slice(1),parts=route.split('/');if(parts[0]==='home')document.getElementById('app').innerHTML=homePage();else if(parts[0]==='entries')document.getElementById('app').innerHTML=entriesPage();else if(parts[0]==='prayers')document.getElementById('app').innerHTML=prayersPage();else if(parts[0]==='members')document.getElementById('app').innerHTML=membersPage();else if(parts[0]==='search'){document.getElementById('app').innerHTML=searchPage();bindSearch();}else if(parts[0]==='settings'){document.getElementById('app').innerHTML=settingsPage();bindSettings();}else if(parts[0]==='prayer')document.getElementById('app').innerHTML=prayerDetail(parts[1]);else if(parts[0]==='entry'){if(parts[1]==='new'||parts[2]==='edit'){const id=parts[1]==='new'?'new':parts[1];document.getElementById('app').innerHTML=entryEditor(id);bindEntryEditor(id);}else document.getElementById('app').innerHTML=entryDetail(parts[1]);}else if(parts[0]==='member'){if(parts[1]==='new'||parts[2]==='edit'){const id=parts[1]==='new'?'new':parts[1];document.getElementById('app').innerHTML=memberEditor(id);bindMemberEditor(id);}else document.getElementById('app').innerHTML=memberDetail(parts[1]);}else location.hash='#home';window.scrollTo(0,0);}
 // Resolve `render` when navigation happens so enhancement modules loaded after
 // this file can safely extend routing (session type selection and drafts).
 window.addEventListener('hashchange',()=>render());
-window.addEventListener('DOMContentLoaded',async()=>{state=await loadState();render();if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(console.error);});
+window.addEventListener('DOMContentLoaded',async()=>{state=await loadState();render();bindUpdateModal();watchForAppUpdates().catch(console.error);});
