@@ -1,13 +1,13 @@
 # Gathered
 
-Gathered is a local-first Progressive Web App for small groups and Sunday worship. It tracks sessions, Scripture references, journal notes, members, durable prayer histories, and follow-up/action items.
+Gathered is a local-first Progressive Web App for small groups, Sunday worship, and individual devotion. It tracks sessions, Scripture references, journal notes, members, durable prayer histories, and follow-up/action items.
 
 ## Features
 
 - First-run small group setup
 - Member create / view / edit / delete flows
 - Member contact info, birthday, role, notes, and longitudinal timeline
-- Small Group and Sunday Worship sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
+- Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
 - Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
 - Persistent prayer lifecycle from initial request through updates and answered prayer
 - Follow-up/action items with owner, due date, and completion status
