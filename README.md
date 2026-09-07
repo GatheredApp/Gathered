@@ -8,6 +8,7 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 - Member create / view / edit / delete flows
 - Member contact info, birthday, role, notes, and longitudinal timeline
 - Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
+- Automatic Scripture text in the selected translation (including NIV) at the start of each new session journal, using a user-provided YouVersion API key
 - Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
 - Persistent prayer lifecycle from initial request through updates and answered prayer
 - Follow-up/action items with owner, due date, and completion status
