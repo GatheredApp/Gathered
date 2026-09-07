@@ -4,8 +4,8 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.7.0';
-const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const APP_VERSION = '1.8.1';
+const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
   NIV: { id: 111, label: 'NIV' },
@@ -143,14 +143,33 @@ function normalizeScriptureResponse(passage,reference,translation) {
   return {text:`${passage.data?.reference||passage.reference||reference} (${translation})\n${text}`,notice:passage.notice||passage.copyright||passage.data?.copyright||''};
 }
 
+async function scriptureRequestError(response,translation) {
+  let providerMessage='';
+  try{
+    const payload=await response.json();
+    providerMessage=String(payload?.message||payload?.error?.message||payload?.error||payload?.detail||'').trim();
+  }catch(_error){/* The HTTP status remains useful when YouVersion returns no JSON body. */}
+  const guidance=response.status===401
+    ?'YouVersion did not accept the selected application key.'
+    :response.status===403
+      ?'YouVersion accepted the request but denied access. Check the application’s NIV permission and allowed browser origin.'
+      :'';
+  const detail=providerMessage||guidance;
+  const error=new Error(`${translation} Scripture request failed (${response.status})${detail?`: ${detail}`:''}`);
+  error.status=response.status;
+  error.code=response.status===401||response.status===403?'TRANSLATION_ACCESS':'API_ERROR';
+  error.providerMessage=providerMessage;
+  return error;
+}
+
 function createScriptureProvider({userApiKey='',proxyEndpoint=SCRIPTURE_PROXY_ENDPOINT}={}) {
   return {
     async fetch(reference,translation,signal) {
       const bible=TRANSLATIONS[translation],passageId=scripturePassageId(reference,translation);
       if(!bible||!passageId)throw new Error('Unsupported translation or passage');
       if(userApiKey){
-        const response=await fetch(`https://api.youversion.com/v1/bibles/${bible.id}/passages/${passageId}?format=text`,{headers:{'X-YVP-App-Key':userApiKey},signal});
-        if(!response.ok)throw new Error(`Scripture request failed (${response.status})`);
+        const response=await fetch(`https://api.youversion.com/v1/bibles/${bible.id}/passages/${encodeURIComponent(passageId)}?format=text`,{headers:{'Accept':'application/json','X-YVP-App-Key':userApiKey},signal});
+        if(!response.ok)throw await scriptureRequestError(response,translation);
         return normalizeScriptureResponse(await response.json(),reference,translation);
       }
       const response=await fetch(proxyEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId,translation}),signal});
@@ -169,10 +188,13 @@ function createScriptureProvider({userApiKey='',proxyEndpoint=SCRIPTURE_PROXY_EN
   };
 }
 
-async function fetchScriptureText(reference, translation, access={}, signal) {
-  // Keep accepting the former string argument for people who supplied their own key.
-  const options=typeof access==='string'?{userApiKey:access}:access;
-  const result=await createScriptureProvider(options).fetch(reference,translation,signal);
+async function fetchScripturePassage(reference, translation, credential, signal) {
+  if(!credential){const error=new Error('No authenticated Scripture provider is configured');error.code='NO_PROVIDER';throw error;}
+  return createScriptureProvider({userApiKey:credential}).fetch(reference,translation,signal);
+}
+
+async function fetchScriptureText(reference, translation, credential, signal) {
+  const result=await fetchScripturePassage(reference,translation,credential,signal);
   return result.text;
 }
 
@@ -225,22 +247,40 @@ function bindEntryEditor(id){
   if(existing) entryFollowUpIds(existing).map(getFollowUp).filter(Boolean).forEach(addFollowUp);
   document.getElementById('addNewPrayer').onclick=()=>addNewPrayer(); document.getElementById('addPrayerUpdate').onclick=()=>addPrayerUpdate(); document.getElementById('addFollowUp').onclick=()=>addFollowUp();
   const scripture=document.getElementById('scripture'),translation=document.getElementById('translation'),preview=document.getElementById('scripturePreview'),scriptureStatus=document.getElementById('scriptureStatus'),journal=document.getElementById('journal');
-  let scriptureTimer,scriptureRequest,requestSequence=0;
+  let scriptureTimer,scriptureRequest,requestSequence=0,lastVerseBlock='';
+  const selectedCredential=()=>state.settings.youVersionApiKey?.trim()||globalThis.PUBLIC_YOUVERSION_APP_KEY?.trim()||'';
+  const insertPassage=(result,selectedTranslation)=>{
+    const notice=result.notice?.trim()||'';
+    const block=`${result.text}${notice?`\n${notice}`:''}\n\n`;
+    if(lastVerseBlock&&journal.value.startsWith(lastVerseBlock))journal.value=block+journal.value.slice(lastVerseBlock.length);
+    else journal.value=block+journal.value;
+    lastVerseBlock=block;
+    translation.value=selectedTranslation;
+    preview.innerHTML=`<div class="scripture-preview"><strong>${esc(result.text.split('\n')[0])}</strong>${notice?`<div class="scripture-attribution">${esc(notice)}</div>`:''}</div>`;
+  };
   const loadScripture=async()=>{
     const reference=scripture.value.trim();
     if(!canSeedScripture(existing)||!parseScripture(reference,translation.value))return;
     const requestedTranslation=translation.value,sequence=++requestSequence;
     scriptureRequest?.abort();scriptureRequest=new AbortController();scriptureStatus.textContent='Adding Scripture to your journal…';
     try{
-      const provider=createScriptureProvider({userApiKey:state.settings.youVersionApiKey});
-      const result=requestedTranslation==='KJV'?await provider.fetchPublicDomain(reference,scriptureRequest.signal):await provider.fetch(reference,requestedTranslation,scriptureRequest.signal);
+      const result=await fetchScripturePassage(reference,requestedTranslation,selectedCredential(),scriptureRequest.signal);
       if(sequence!==requestSequence||scripture.value.trim()!==reference||translation.value!==requestedTranslation)return;
-      if(journal.value===''){journal.value=`${result.text}\n\n`;scriptureStatus.textContent=`Scripture added in ${requestedTranslation}.${result.notice?` ${result.notice}`:''}`;}
-      else scriptureStatus.textContent='Scripture found, but your existing journal notes were left unchanged.';
+      insertPassage(result,requestedTranslation);
+      scriptureStatus.textContent=`Scripture added in ${requestedTranslation}.${result.notice?` ${result.notice}`:''}`;
     }catch(error){if(error.name!=='AbortError'&&sequence===requestSequence){
-      const fallback=requestedTranslation!=='KJV'?'<button class="btn small secondary" type="button" id="useKjvFallback">Use public-domain KJV instead</button>':'';
-      scriptureStatus.innerHTML=`Automatic ${esc(requestedTranslation)} insertion requires licensed access. You can paste the text manually. ${fallback}`;
-      document.getElementById('useKjvFallback')?.addEventListener('click',async()=>{translation.value='KJV';scriptureStatus.textContent='Loading public-domain KJV…';try{const result=await createScriptureProvider().fetchPublicDomain(scripture.value.trim(),scriptureRequest.signal);if(journal.value==='')journal.value=`${result.text}\n\n`;scriptureStatus.textContent=journal.value.startsWith(result.text)?result.notice:'KJV found, but your existing journal notes were left unchanged.';}catch(fallbackError){if(fallbackError.name!=='AbortError')scriptureStatus.textContent=`Could not load public-domain KJV: ${fallbackError.message}`;}});
+      scriptureStatus.textContent=`Could not load ${requestedTranslation}: ${error.message}`;
+      if(requestedTranslation==='NIV'&&error.code==='TRANSLATION_ACCESS'){
+        const {confirmed}=await appModal.confirm(`NIV could not be loaded with the selected application key.\n\n${error.message}\n\nWould you like to use KJV instead? The session translation will be changed to KJV.`,{title:'Use KJV instead?',confirmLabel:'Use KJV'});
+        if(!confirmed||sequence!==requestSequence)return;
+        scriptureStatus.textContent='Loading KJV…';
+        try{
+          const result=await fetchScripturePassage(reference,'KJV',selectedCredential(),scriptureRequest.signal);
+          if(sequence!==requestSequence)return;
+          insertPassage(result,'KJV');
+          scriptureStatus.textContent=`Scripture added in KJV.${result.notice?` ${result.notice}`:''}`;
+        }catch(fallbackError){if(fallbackError.name!=='AbortError'&&sequence===requestSequence)scriptureStatus.textContent=`Could not load KJV: ${fallbackError.message}`;}
+      }
     }}
   };
   const updatePreview=()=>{const p=parseScripture(scripture.value,translation.value);preview.innerHTML=p?`<a class="scripture-link" href="${p.url}" target="_blank" rel="noopener">Open in YouVersion ↗</a>`:`<div class="subtle mini">Use a format like “Romans 8:28” or “Psalm 23”.</div>`;clearTimeout(scriptureTimer);requestSequence++;scriptureRequest?.abort();if(canSeedScripture(existing)&&p)scriptureTimer=setTimeout(loadScripture,500);else if(!p)scriptureStatus.textContent='';}; scripture.addEventListener('input',updatePreview);translation.addEventListener('change',updatePreview);updatePreview();
@@ -278,7 +318,7 @@ function validateBackup(data){const errors=[];if(!data||typeof data!=='object')e
 function backupFilename(label='backup'){return `gathered-${label}-${todayISO()}.json`;}
 async function downloadBackup(label='backup',mark=true){const snapshot={...state,exportedAt:new Date().toISOString()};const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=backupFilename(label);document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);if(mark){state.settings.lastBackupAt=new Date().toISOString();await saveState();}}
 
-function settingsPage(){const last=state.settings.lastBackupAt?new Date(state.settings.lastBackupAt).toLocaleString():'Never';return shell(`<div class="page"><div class="hero"><div class="eyebrow">Gathered</div><h1>Settings</h1></div><div class="card flat"><div class="settings-row"><div><strong>Small group</strong><div class="subtle mini">${esc(state.group.name)}</div></div><button class="btn small ghost" id="renameGroup">Rename</button></div><div class="settings-row"><div><strong>Default translation</strong><div class="subtle mini">Used for new YouVersion links. Changing it here is your affirmative choice; Gathered never changes translations automatically.</div></div><select class="select compact" id="defaultTranslation">${Object.keys(TRANSLATIONS).map(k=>`<option ${state.settings.translation===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="settings-row stack"><div><strong>User-provided YouVersion API key</strong><div class="subtle mini">Optional personal access. It is stored in encrypted local data and encrypted backups and is sent directly to YouVersion. A deployed Gathered server may instead provide licensed access; its credential always remains server-side and is never stored by the app. Without either, licensed NIV text must be pasted manually, with an explicitly selected public-domain KJV fallback available.</div></div><div class="inline"><input class="input" id="youVersionApiKey" type="password" value="${esc(state.settings.youVersionApiKey||'')}" autocomplete="off" placeholder="Your API key (optional)"><button class="btn small secondary" id="saveApiKey" type="button">Save</button></div></div><div class="settings-row"><div><strong>Export backup</strong><div class="subtle mini">Last recorded backup: ${esc(last)}</div></div><button class="btn small secondary" id="exportData">Export</button></div><div class="settings-row"><div><strong>Import backup</strong><div class="subtle mini">Validates the file and exports your current data first.</div></div><label class="btn small ghost" for="importData">Import</label><input class="file-input" type="file" id="importData" accept="application/json,.json"></div><div class="settings-row"><div><strong>Update Gathered</strong><div class="subtle mini">Deletes cached app files and downloads the latest deployed files from the repository host. Your IndexedDB data is preserved.</div></div><button class="btn small secondary" id="updateApp">Update App</button></div><div class="settings-row"><div><strong>Reset app</strong><div class="subtle mini">Exports a safety backup, then deletes local Gathered data.</div></div><button class="btn small danger" id="resetApp">Reset</button></div></div><div class="notice section">Prayer requests can contain sensitive personal information. Gathered remains local-first and stores its primary data in IndexedDB on this device.</div></div>`,'');}
+function settingsPage(){const last=state.settings.lastBackupAt?new Date(state.settings.lastBackupAt).toLocaleString():'Never';return shell(`<div class="page"><div class="hero"><div class="eyebrow">Gathered</div><h1>Settings</h1></div><div class="card flat"><div class="settings-row"><div><strong>Small group</strong><div class="subtle mini">${esc(state.group.name)}</div></div><button class="btn small ghost" id="renameGroup">Rename</button></div><div class="settings-row"><div><strong>Default translation</strong><div class="subtle mini">Used for new YouVersion links. Changing it here is your affirmative choice; Gathered never changes translations automatically.</div></div><select class="select compact" id="defaultTranslation">${Object.keys(TRANSLATIONS).map(k=>`<option ${state.settings.translation===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="settings-row stack"><div><strong>YouVersion API key override (optional)</strong><div class="subtle mini">Overrides Gathered’s built-in public application key on this device. Your override is stored in encrypted local data and encrypted backups and is sent directly to YouVersion. The built-in public key is part of the app files and is never copied into user data or exports.</div></div><div class="inline"><input class="input" id="youVersionApiKey" type="password" value="${esc(state.settings.youVersionApiKey||'')}" autocomplete="off" placeholder="Optional API key override"><button class="btn small secondary" id="saveApiKey" type="button">Save</button></div></div><div class="settings-row"><div><strong>Export backup</strong><div class="subtle mini">Last recorded backup: ${esc(last)}</div></div><button class="btn small secondary" id="exportData">Export</button></div><div class="settings-row"><div><strong>Import backup</strong><div class="subtle mini">Validates the file and exports your current data first.</div></div><label class="btn small ghost" for="importData">Import</label><input class="file-input" type="file" id="importData" accept="application/json,.json"></div><div class="settings-row"><div><strong>Update Gathered</strong><div class="subtle mini">Deletes cached app files and downloads the latest deployed files from the repository host. Your IndexedDB data is preserved.</div></div><button class="btn small secondary" id="updateApp">Update App</button></div><div class="settings-row"><div><strong>Reset app</strong><div class="subtle mini">Exports a safety backup, then deletes local Gathered data.</div></div><button class="btn small danger" id="resetApp">Reset</button></div></div><div class="notice section">Prayer requests can contain sensitive personal information. Gathered remains local-first and stores its primary data in IndexedDB on this device.</div></div>`,'');}
 async function forceAppUpdate(){if(!(await appModal.confirm('Update Gathered now? Cached app files will be removed and the latest deployed files will be downloaded. Your journal data will stay intact.',{title:'Update Gathered',confirmLabel:'Update App'})).confirmed)return;const btn=document.getElementById('updateApp');btn.disabled=true;btn.textContent='Updating…';try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));}if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}const stamp=Date.now();await Promise.all(APP_ASSETS.map(path=>fetch(`${path}${path.includes('?')?'&':'?'}gathered_update=${stamp}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(`${path}: ${r.status}`);})));if('serviceWorker' in navigator)await navigator.serviceWorker.register(`./sw.js?gathered_update=${stamp}`);location.replace(`./?gathered_update=${stamp}#settings`);}catch(e){console.error(e);await appModal.error('Gathered could not complete the update. Check your connection and try again.',{title:'Update failed'});btn.disabled=false;btn.textContent='Update App';}}
 
 function showUpdateModal(){
