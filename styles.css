@@ -133,24 +133,29 @@ p { line-height: 1.5; }
 .notice { padding: 12px 13px; border-radius: 13px; background: #fff9ec; border: 1px solid #ecd9ae; color: #6b5121; font-size: 13px; line-height: 1.45; }
 .toast { position: fixed; left: 50%; bottom: calc(88px + var(--safe-bottom)); transform: translate(-50%, 20px); background: #17221e; color: white; padding: 10px 14px; border-radius: 999px; z-index: 100; opacity: 0; pointer-events: none; transition: .2s ease; font-size: 13px; box-shadow: var(--shadow); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
-.update-modal {
+.modal-overlay {
   position: fixed; inset: 0; z-index: 200; padding: 20px;
   display: grid; place-items: center; background: rgba(12, 26, 21, .58);
   backdrop-filter: blur(5px);
 }
-.update-modal[hidden] { display: none; }
-.update-modal-card {
+.modal-overlay[hidden] { display: none; }
+.modal-card {
   width: min(420px, 100%); padding: 24px; border-radius: 22px;
   background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(12, 26, 21, .3);
   display: grid; gap: 13px; text-align: center;
 }
-.update-modal-card h2 { margin-top: 5px; font-size: 24px; }
-.update-modal-card p { margin: 8px 0 2px; }
-.update-modal-icon {
+.modal-card h2 { margin-top: 5px; font-size: 24px; }
+.modal-card p { margin: 8px 0 2px; }
+.update-modal-icon, .modal-icon {
   width: 52px; height: 52px; margin: 0 auto; border-radius: 16px;
   display: grid; place-items: center; background: var(--surface-2); color: var(--brand);
   font-size: 30px; font-weight: 800;
 }
+.modal-description { white-space: pre-line; }
+.modal-field { text-align: left; }
+.modal-error { color: var(--danger, #9d2f2f); font-weight: 700; text-align: left; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-actions .btn { min-width: 96px; }
 .detail-body { white-space: pre-wrap; line-height: 1.6; }
 .scripture-link { display: inline-flex; gap: 8px; align-items: center; padding: 11px 13px; border-radius: 13px; background: var(--surface-2); color: var(--brand); font-weight: 800; text-decoration: none; }
 .kicker { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
