@@ -80,7 +80,7 @@ test('editor implements credential precedence, opt-in fallback, note replacement
   assert.match(source,/appModal\.confirm/);
   assert.match(source,/requestedTranslation==='NIV'&&error\.code==='TRANSLATION_ACCESS'/);
   assert.match(source,/if\(!confirmed/);
-  assert.match(source,/fetchScripturePassage\(reference,'KJV'/);
+  assert.match(source,/createScriptureProvider\(\)\.fetchPublicDomain\(reference/);
   assert.match(source,/lastVerseBlock&&journal\.value\.startsWith\(lastVerseBlock\)/);
   assert.match(source,/translation\.value=selectedTranslation/);
   assert.match(source,/scripture-attribution/);

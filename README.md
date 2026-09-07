@@ -8,7 +8,7 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 - Member create / view / edit / delete flows
 - Member contact info, birthday, role, notes, and longitudinal timeline
 - Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
-- Automatic Scripture text through the built-in public YouVersion application key, with an optional user-key override and an explicit opt-in YouVersion KJV fallback
+- Automatic NIV text through the built-in public YouVersion application key, with an optional user-key override and an explicit opt-in public-domain KJV fallback
 - Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
 - Persistent prayer lifecycle from initial request through updates and answered prayer
 - Follow-up/action items with owner, due date, and completion status
@@ -48,7 +48,7 @@ Then open `http://localhost:8080`.
 
 `public-config.js` defines `PUBLIC_YOUVERSION_APP_KEY` and is loaded before `app.js`. This is an **intentionally public browser configuration value**, not a secret: it is downloaded to every browser, cached for installed PWAs, and can be inspected by users. A project owner should place only the approved public application key there. Never place a confidential server credential in that file.
 
-Users may enter their own YouVersion key in Settings as an optional override. Only that override is part of encrypted user state and backup exports; the built-in public key remains application configuration and is never serialized into either. NIV is requested from YouVersion Bible ID `111`. On an authorization or translation-access failure, Gathered asks before trying KJV Bible ID `1` through the same API. This is not an independent fallback for a revoked key, YouVersion outage, CORS failure, timeout, or exhausted quota. Gathered does not bundle a KJV dataset; an outage-independent fallback would require a separately reviewed redistributable dataset or approved provider with its source and license documented here before release.
+Users may enter their own YouVersion key in Settings as an optional override. Only that override is part of encrypted user state and backup exports; the built-in public key remains application configuration and is never serialized into either. NIV is requested from YouVersion Bible ID `111`. On an authorization or translation-access failure, Gathered asks before using the public-domain KJV supplied by [bible-api.com](https://bible-api.com/). The provider documents its default KJV text as public domain. Because this fallback is independent of YouVersion, it also avoids relying on a YouVersion Bible identifier that may not exist for the application key. The inserted block is labeled “KJV” and includes a public-domain attribution.
 
 For browser-hosted deployments, the YouVersion application must permit the deployed web origin as well as Bible ID `111`. A `403` can therefore occur even when the application has NIV access if its allowed-origin configuration does not exactly match the PWA origin (scheme, host, and port). Gathered displays YouVersion's response detail when available and otherwise distinguishes a rejected key (`401`) from denied application/origin access (`403`) without displaying the credential.
 
@@ -60,4 +60,4 @@ The **Update App** button refreshes files from the app's deployed origin. When d
 
 Gathered uses standard `bible.com/bible/{versionId}/{passage}` URLs. Mobile operating systems may hand these URLs to the installed YouVersion Bible app through universal/app-link association; otherwise the passage opens on bible.com.
 
-Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. Only an NIV authorization or translation-access response offers the user the authenticated YouVersion KJV fallback described above; the inserted text and saved translation are labeled KJV.
+Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. Only an NIV authorization or translation-access response offers the user the independent public-domain KJV fallback described above; the inserted text and saved translation are labeled KJV.

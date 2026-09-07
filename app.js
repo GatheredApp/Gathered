@@ -4,7 +4,7 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.8.2';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
@@ -271,11 +271,11 @@ function bindEntryEditor(id){
     }catch(error){if(error.name!=='AbortError'&&sequence===requestSequence){
       scriptureStatus.textContent=`Could not load ${requestedTranslation}: ${error.message}`;
       if(requestedTranslation==='NIV'&&error.code==='TRANSLATION_ACCESS'){
-        const {confirmed}=await appModal.confirm(`NIV could not be loaded with the selected application key.\n\n${error.message}\n\nWould you like to use KJV instead? The session translation will be changed to KJV.`,{title:'Use KJV instead?',confirmLabel:'Use KJV'});
+        const {confirmed}=await appModal.confirm(`NIV could not be loaded with the selected application key.\n\n${error.message}\n\nWould you like to use the public-domain KJV instead? The session translation will be changed to KJV.`,{title:'Use KJV instead?',confirmLabel:'Use KJV'});
         if(!confirmed||sequence!==requestSequence)return;
         scriptureStatus.textContent='Loading KJV…';
         try{
-          const result=await fetchScripturePassage(reference,'KJV',selectedCredential(),scriptureRequest.signal);
+          const result=await createScriptureProvider().fetchPublicDomain(reference,scriptureRequest.signal);
           if(sequence!==requestSequence)return;
           insertPassage(result,'KJV');
           scriptureStatus.textContent=`Scripture added in KJV.${result.notice?` ${result.notice}`:''}`;
@@ -319,7 +319,21 @@ function backupFilename(label='backup'){return `gathered-${label}-${todayISO()}.
 async function downloadBackup(label='backup',mark=true){const snapshot={...state,exportedAt:new Date().toISOString()};const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=backupFilename(label);document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);if(mark){state.settings.lastBackupAt=new Date().toISOString();await saveState();}}
 
 function settingsPage(){const last=state.settings.lastBackupAt?new Date(state.settings.lastBackupAt).toLocaleString():'Never';return shell(`<div class="page"><div class="hero"><div class="eyebrow">Gathered</div><h1>Settings</h1></div><div class="card flat"><div class="settings-row"><div><strong>Small group</strong><div class="subtle mini">${esc(state.group.name)}</div></div><button class="btn small ghost" id="renameGroup">Rename</button></div><div class="settings-row"><div><strong>Default translation</strong><div class="subtle mini">Used for new YouVersion links. Changing it here is your affirmative choice; Gathered never changes translations automatically.</div></div><select class="select compact" id="defaultTranslation">${Object.keys(TRANSLATIONS).map(k=>`<option ${state.settings.translation===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="settings-row stack"><div><strong>YouVersion API key override (optional)</strong><div class="subtle mini">Overrides Gathered’s built-in public application key on this device. Your override is stored in encrypted local data and encrypted backups and is sent directly to YouVersion. The built-in public key is part of the app files and is never copied into user data or exports.</div></div><div class="inline"><input class="input" id="youVersionApiKey" type="password" value="${esc(state.settings.youVersionApiKey||'')}" autocomplete="off" placeholder="Optional API key override"><button class="btn small secondary" id="saveApiKey" type="button">Save</button></div></div><div class="settings-row"><div><strong>Export backup</strong><div class="subtle mini">Last recorded backup: ${esc(last)}</div></div><button class="btn small secondary" id="exportData">Export</button></div><div class="settings-row"><div><strong>Import backup</strong><div class="subtle mini">Validates the file and exports your current data first.</div></div><label class="btn small ghost" for="importData">Import</label><input class="file-input" type="file" id="importData" accept="application/json,.json"></div><div class="settings-row"><div><strong>Update Gathered</strong><div class="subtle mini">Deletes cached app files and downloads the latest deployed files from the repository host. Your IndexedDB data is preserved.</div></div><button class="btn small secondary" id="updateApp">Update App</button></div><div class="settings-row"><div><strong>Reset app</strong><div class="subtle mini">Exports a safety backup, then deletes local Gathered data.</div></div><button class="btn small danger" id="resetApp">Reset</button></div></div><div class="notice section">Prayer requests can contain sensitive personal information. Gathered remains local-first and stores its primary data in IndexedDB on this device.</div></div>`,'');}
-async function forceAppUpdate(){if(!(await appModal.confirm('Update Gathered now? Cached app files will be removed and the latest deployed files will be downloaded. Your journal data will stay intact.',{title:'Update Gathered',confirmLabel:'Update App'})).confirmed)return;const btn=document.getElementById('updateApp');btn.disabled=true;btn.textContent='Updating…';try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));}if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}const stamp=Date.now();await Promise.all(APP_ASSETS.map(path=>fetch(`${path}${path.includes('?')?'&':'?'}gathered_update=${stamp}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(`${path}: ${r.status}`);})));if('serviceWorker' in navigator)await navigator.serviceWorker.register(`./sw.js?gathered_update=${stamp}`);location.replace(`./?gathered_update=${stamp}#settings`);}catch(e){console.error(e);await appModal.error('Gathered could not complete the update. Check your connection and try again.',{title:'Update failed'});btn.disabled=false;btn.textContent='Update App';}}
+async function installLatestApp(button,hash=location.hash){
+  button.disabled=true;button.textContent='Updating…';
+  try{
+    if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));}
+    if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}
+    const stamp=Date.now();
+    await Promise.all(APP_ASSETS.map(path=>fetch(`${path}${path.includes('?')?'&':'?'}gathered_update=${stamp}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(`${path}: ${r.status}`);} )));
+    if('serviceWorker' in navigator)await navigator.serviceWorker.register(`./sw.js?gathered_update=${stamp}`);
+    location.replace(`./?gathered_update=${stamp}${hash||'#home'}`);
+  }catch(e){
+    console.error(e);await appModal.error('Gathered could not complete the update. Check your connection and try again.',{title:'Update failed'});
+    button.disabled=false;button.textContent='Update App';
+  }
+}
+async function forceAppUpdate(){if(!(await appModal.confirm('Update Gathered now? Cached app files will be removed and the latest deployed files will be downloaded. Your journal data will stay intact.',{title:'Update Gathered',confirmLabel:'Update App'})).confirmed)return;await installLatestApp(document.getElementById('updateApp'),'#settings');}
 
 function showUpdateModal(){
   const modal=document.getElementById('updateModal');
@@ -362,9 +376,9 @@ async function watchForAppUpdates(){
 function bindUpdateModal(){
   const modal=document.getElementById('updateModal'),install=document.getElementById('installUpdate');
   document.getElementById('dismissUpdate')?.addEventListener('click',()=>{modal.hidden=true;});
-  install?.addEventListener('click',()=>{
-    install.disabled=true;install.textContent='Updating…';
-    location.reload();
+  install?.addEventListener('click',async()=>{
+    modal.hidden=true;
+    await installLatestApp(install);
   });
 }
 function bindSettings(){document.getElementById('defaultTranslation').onchange=async e=>{state.settings.translation=e.target.value;await saveState();toast('Default updated');};document.getElementById('saveApiKey').onclick=async()=>{state.settings.youVersionApiKey=document.getElementById('youVersionApiKey').value.trim();await saveState();toast('API key saved');};document.getElementById('renameGroup').onclick=async()=>{const {confirmed,value:n}=await appModal.input('Enter a name for this small group.',{title:'Rename small group',label:'Small group name',value:state.group.name,required:true,confirmLabel:'Rename'});if(confirmed&&n.trim()){state.group.name=n.trim();await saveState();render();}};document.getElementById('exportData').onclick=async()=>{await downloadBackup('backup',true);render();toast('Backup exported');};document.getElementById('importData').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text()),check=validateBackup(data);if(!check.valid)throw new Error(check.errors.join('\n'));const incoming=migrateState(data);if((await appModal.confirm(`Import backup for “${incoming.group.name}”?\n\n${incoming.members.length} members · ${incoming.entries.length} sessions · ${incoming.prayers.length} prayers\n\nYour current Gathered data will be exported first.`,{title:'Restore backup',confirmLabel:'Import',destructive:true})).confirmed){await downloadBackup('pre-import',false);state=incoming;await saveState();location.hash='#home';render();toast('Backup restored');}}catch(err){await appModal.error(`That file is not a valid Gathered backup.\n\n${err.message||''}`,{title:'Import failed'});}};document.getElementById('updateApp').onclick=forceAppUpdate;document.getElementById('resetApp').onclick=async()=>{if((await appModal.confirm('Reset Gathered? A safety backup will download first, then all local journal data will be deleted.',{title:'Reset Gathered',confirmLabel:'Reset',destructive:true})).confirmed){await downloadBackup('pre-reset',false);await dbDelete(STATE_KEY);state=defaultState();location.hash='';render();}};}
