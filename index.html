@@ -14,8 +14,8 @@
 </head>
 <body>
   <div id="app"></div>
-  <div class="update-modal" id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateTitle" aria-describedby="updateDescription" hidden>
-    <div class="update-modal-card">
+  <div class="modal-overlay" id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateTitle" aria-describedby="updateDescription" hidden>
+    <div class="modal-card">
       <div class="update-modal-icon" aria-hidden="true">↻</div>
       <div>
         <div class="eyebrow">Update available</div>
@@ -26,7 +26,24 @@
       <button class="btn ghost block" id="dismissUpdate" type="button">Not now</button>
     </div>
   </div>
+  <div class="modal-overlay" id="appModal" role="dialog" aria-modal="true" aria-labelledby="appModalTitle" aria-describedby="appModalDescription" hidden>
+    <form class="modal-card" id="appModalForm" novalidate>
+      <div class="modal-icon" id="appModalIcon" aria-hidden="true">i</div>
+      <h2 id="appModalTitle"></h2>
+      <p class="modal-description subtle" id="appModalDescription"></p>
+      <div class="modal-field field" id="appModalField" hidden>
+        <label for="appModalInput" id="appModalLabel"></label>
+        <input class="input" id="appModalInput" autocomplete="off" />
+      </div>
+      <p class="modal-error" id="appModalError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="appModalCancel" type="button">Cancel</button>
+        <button class="btn primary" id="appModalSubmit" type="submit">OK</button>
+      </div>
+    </form>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="modal-controller.js" defer></script>
   <script src="app.js" defer></script>
   <script src="standalone-prayers.js" defer></script>
   <script src="share.js" defer></script>

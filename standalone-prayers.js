@@ -109,7 +109,7 @@ async function deletePrayerUpdate(prayerId, updateId) {
   const prayer = getPrayer(prayerId);
   const update = prayer?.updates?.find(u => u.id === updateId);
   if (!prayer || !update) return;
-  if (!confirm('Delete this prayer update? This cannot be undone.')) return;
+  if (!(await appModal.confirm('Delete this prayer update? This cannot be undone.', { title: 'Delete prayer update', confirmLabel: 'Delete', destructive: true })).confirmed) return;
   prayer.updates = (prayer.updates || []).filter(u => u.id !== updateId);
   prayer.updatedAt = new Date().toISOString();
   await saveState();
