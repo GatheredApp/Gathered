@@ -4,7 +4,7 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
@@ -139,6 +139,10 @@ async function fetchScriptureText(reference, translation, apiKey, signal) {
   return `${passage.data?.reference||passage.reference||reference} (${bible.label})\n${text}`;
 }
 
+function canSeedScripture(existing) {
+  return !existing||existing.status==='draft';
+}
+
 function shell(content,active='home') {
   const groupName=state.group?.name||'Gathered';
   return `<div class="app-shell"><header class="topbar"><div class="brand-lockup"><img class="brand-logo" src="icons/icon-192.png" alt=""><div class="brand-text"><strong>${esc(groupName)}</strong><span>Gathered · Scripture, community & prayer</span></div></div><div class="top-actions"><a class="icon-btn" href="#search" aria-label="Search">⌕</a><a class="icon-btn" href="#settings" aria-label="Settings">⚙</a></div></header><main>${content}</main><nav class="bottom-nav">${navItem('home','⌂','Home',active)}${navItem('prayers','♡','Prayers',active)}${navItem('members','♙','Members',active)}${navItem('entries','☷','Sessions',active)}</nav></div>`;
@@ -187,7 +191,7 @@ function bindEntryEditor(id){
   let scriptureTimer,scriptureRequest,lastVerseBlock='';
   const loadScripture=async()=>{
     const reference=scripture.value.trim();
-    if(existing||!parseScripture(reference,translation.value))return;
+    if(!canSeedScripture(existing)||!parseScripture(reference,translation.value))return;
     if(!state.settings.youVersionApiKey){scriptureStatus.innerHTML='Add a YouVersion API key in <a href="#settings">Settings</a> to insert licensed Bible text.';return;}
     scriptureRequest?.abort();scriptureRequest=new AbortController();scriptureStatus.textContent='Adding Scripture to your journal…';
     try{
@@ -196,9 +200,9 @@ function bindEntryEditor(id){
         const notes=lastVerseBlock?journal.value.slice(lastVerseBlock.length):journal.value;
         journal.value=block+notes;lastVerseBlock=block;scriptureStatus.textContent=`Scripture added in ${translation.value}. Continue writing below it.`;
       }else scriptureStatus.textContent='Scripture found, but your existing journal text was left unchanged.';
-    }catch(error){if(error.name!=='AbortError')scriptureStatus.textContent='Could not load the passage. You can still type or paste it into the journal.';}
+    }catch(error){if(error.name!=='AbortError')scriptureStatus.textContent=`Could not load the passage${error.message?`: ${error.message}`:''}. Check your YouVersion API key and translation access.`;}
   };
-  const updatePreview=()=>{const p=parseScripture(scripture.value,translation.value);preview.innerHTML=p?`<a class="scripture-link" href="${p.url}" target="_blank" rel="noopener">Open in YouVersion ↗</a>`:`<div class="subtle mini">Use a format like “Romans 8:28” or “Psalm 23”.</div>`;clearTimeout(scriptureTimer);scriptureRequest?.abort();if(!existing&&p)scriptureTimer=setTimeout(loadScripture,500);else if(!p)scriptureStatus.textContent='';}; scripture.addEventListener('input',updatePreview);translation.addEventListener('change',updatePreview);updatePreview();
+  const updatePreview=()=>{const p=parseScripture(scripture.value,translation.value);preview.innerHTML=p?`<a class="scripture-link" href="${p.url}" target="_blank" rel="noopener">Open in YouVersion ↗</a>`:`<div class="subtle mini">Use a format like “Romans 8:28” or “Psalm 23”.</div>`;clearTimeout(scriptureTimer);scriptureRequest?.abort();if(canSeedScripture(existing)&&p)scriptureTimer=setTimeout(loadScripture,500);else if(!p)scriptureStatus.textContent='';}; scripture.addEventListener('input',updatePreview);translation.addEventListener('change',updatePreview);updatePreview();
   document.getElementById('entryForm').onsubmit=async e=>{
     e.preventDefault();const scriptureVal=scripture.value.trim();if(!parseScripture(scriptureVal,translation.value)){toast('Check the Scripture format');scripture.focus();return;}
     const date=document.getElementById('entryDate').value, entryId=existing?.id||uid('entry');
