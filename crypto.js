@@ -2,12 +2,22 @@
 const ENVELOPE_KEY = 'encryptedState.v1';
 const CRYPTO_FORMAT = 1;
 const KDF_ITERATIONS = 600000;
+// Trusted unlocks are an absolute (not activity-sliding) two-hour window.
+const UNLOCK_TTL_MS = 2 * 60 * 60 * 1000;
+const UNLOCK_SESSION_KEY = 'unlockSession.v1';
+const UNLOCK_WRAPPING_KEY = 'unlockWrappingKey.v1';
+const UNLOCK_REVOCATION_KEY = 'gathered.unlockRevocation';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 let cryptoSession = { dek:null, envelope:null, mode:'loading', legacy:null };
 let saveChain = Promise.resolve();
 let saveRevision = 0;
 let draftTimer = 0;
+let unlockExpiryTimer = 0;
+let unlockClockTimer = 0;
+let unlockLastObservedAt = 0;
+let unlockChannel = null;
+let handlingSessionRevocation = false;
 
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
 const unb64 = value => Uint8Array.from(atob(value), c=>c.charCodeAt(0));
@@ -55,6 +65,72 @@ async function unlockEnvelope(envelope,passphrase) {
   return {dek,state:await decryptEnvelope(envelope,dek)};
 }
 
+async function getUnlockWrappingKey() {
+  let key=await dbGet(UNLOCK_WRAPPING_KEY);
+  if(key)return key;
+  // IndexedDB structured-clones this non-extractable CryptoKey; its raw key
+  // material is never serialized into localStorage or JSON.
+  key=await crypto.subtle.generateKey({name:'AES-KW',length:256},false,['wrapKey','unwrapKey']);
+  await dbPut(UNLOCK_WRAPPING_KEY,key);
+  return key;
+}
+async function createUnlockSession(dek,now=Date.now()) {
+  await clearUnlockSession({broadcast:false});
+  const wrappingKey=await getUnlockWrappingKey();
+  const wrappedDek=await crypto.subtle.wrapKey('raw',dek,wrappingKey,'AES-KW');
+  const record={version:1,authenticatedAt:now,lastSeenAt:now,expiresAt:now+UNLOCK_TTL_MS,wrappedDek:b64(wrappedDek)};
+  await dbPut(UNLOCK_SESSION_KEY,record);startUnlockExpiryTimer(record.expiresAt);return record;
+}
+function validUnlockRecord(record,now) {
+  return !!record&&record.version===1&&Number.isFinite(record.authenticatedAt)&&Number.isFinite(record.lastSeenAt)&&Number.isFinite(record.expiresAt)&&typeof record.wrappedDek==='string'&&record.expiresAt-record.authenticatedAt===UNLOCK_TTL_MS&&now>=record.authenticatedAt&&now>=record.lastSeenAt&&now<record.expiresAt;
+}
+async function restoreUnlockSession(envelope,now=Date.now()) {
+  try {
+    const record=await dbGet(UNLOCK_SESSION_KEY);
+    if(!validUnlockRecord(record,now))throw new Error('Expired, malformed, or clock rollback');
+    const wrappingKey=await dbGet(UNLOCK_WRAPPING_KEY);
+    if(!wrappingKey)throw new Error('Missing trusted-session wrapping key');
+    const dek=await crypto.subtle.unwrapKey('raw',unb64(record.wrappedDek),wrappingKey,'AES-KW',{name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+    const restored=await decryptEnvelope(envelope,dek);
+    record.lastSeenAt=now;await dbPut(UNLOCK_SESSION_KEY,record);startUnlockExpiryTimer(record.expiresAt);
+    return {dek,state:restored,expiresAt:record.expiresAt};
+  } catch {await clearUnlockSession({broadcast:false});return null;}
+}
+async function clearUnlockSession({broadcast=true}={}) {
+  clearTimeout(unlockExpiryTimer);clearInterval(unlockClockTimer);unlockExpiryTimer=0;unlockClockTimer=0;unlockLastObservedAt=0;
+  try{await dbDelete(UNLOCK_SESSION_KEY);}catch{}
+  if(broadcast)broadcastUnlockRevocation();
+}
+async function flushPendingDraftSaves() {
+  clearTimeout(draftTimer);draftTimer=0;
+  if(cryptoSession.mode==='unlocked'&&cryptoSession.dek)await saveState();
+  await saveChain;
+}
+async function lockGathered({flush=true,broadcast=true}={}) {
+  if(handlingSessionRevocation)return;
+  handlingSessionRevocation=true;
+  try{if(flush)await flushPendingDraftSaves();}catch{}finally{
+    await clearUnlockSession({broadcast});state=defaultState();cryptoSession.dek=null;cryptoSession.mode='locked';
+    location.hash='';render();handlingSessionRevocation=false;
+  }
+}
+function startUnlockExpiryTimer(expiresAt) {
+  clearTimeout(unlockExpiryTimer);clearInterval(unlockClockTimer);const now=Date.now(),remaining=expiresAt-now;unlockLastObservedAt=now;
+  if(remaining<=0){void lockGathered();return;}
+  unlockExpiryTimer=setTimeout(()=>void lockGathered(),remaining);
+  unlockClockTimer=setInterval(()=>{const observed=Date.now();if(observed<unlockLastObservedAt||observed>=expiresAt){void lockGathered();return;}unlockLastObservedAt=observed;},30000);
+}
+function broadcastUnlockRevocation() {
+  const signal=String(Date.now())+'-'+Math.random();
+  try{unlockChannel?.postMessage({type:'revoke',signal});}catch{}
+  try{localStorage.setItem(UNLOCK_REVOCATION_KEY,signal);}catch{}
+}
+function initializeUnlockCoordination() {
+  if(typeof BroadcastChannel==='function'){unlockChannel=new BroadcastChannel('gathered-trusted-unlock');unlockChannel.onmessage=e=>{if(e.data?.type==='revoke')void lockGathered({broadcast:false});};}
+  window.addEventListener('storage',e=>{if(e.key===UNLOCK_REVOCATION_KEY)void lockGathered({broadcast:false});});
+}
+initializeUnlockCoordination();
+
 // Serialized snapshots ensure an older encryption operation can never overwrite a newer save.
 saveState = function () {
   if(!cryptoSession.dek)return Promise.reject(new Error('Gathered is locked'));
@@ -65,13 +141,14 @@ saveState = function () {
     const envelope={...cryptoSession.envelope,schemaVersion:4,state:encrypted,revision,updatedAt:new Date().toISOString()};
     await dbPut(ENVELOPE_KEY,envelope);
     cryptoSession.envelope=envelope;
-  });
+  }).catch(error=>{void lockGathered({flush:false});throw error;});
   return saveChain;
 };
 
 loadState = async function () {
   const envelope=await dbGet(ENVELOPE_KEY);
-  if(envelope){cryptoSession={dek:null,envelope,mode:'locked',legacy:null};return defaultState();}
+  if(envelope){const restored=await restoreUnlockSession(envelope);if(restored){cryptoSession={dek:restored.dek,envelope,mode:'unlocked',legacy:null};return restored.state;}cryptoSession={dek:null,envelope,mode:'locked',legacy:null};return defaultState();}
+  await clearUnlockSession({broadcast:false});
   let legacy=await dbGet(STATE_KEY);
   if(!legacy){const raw=localStorage.getItem(LEGACY_STORAGE_KEY);if(raw){try{legacy=JSON.parse(raw);}catch{legacy=null;}}}
   cryptoSession={dek:null,envelope:null,mode:'setup',legacy:legacy?migrateState(legacy):null};
@@ -81,8 +158,8 @@ loadState = async function () {
 function securityFrame(title,body){return `<div class="security-screen"><section class="security-card"><img class="onboarding-logo" src="icons/icon-192.png" alt="Gathered"><div class="hero"><div class="eyebrow">Private by design</div><h1>${title}</h1></div>${body}</section></div>`;}
 function setupScreen(){document.getElementById('app').innerHTML=securityFrame('Protect Gathered',`<form id="securitySetup" class="card form"><p class="subtle">Create a long, memorable app-wide passphrase. Your journal, sessions, members, prayers, follow-ups, and drafts will be encrypted on this device.</p><div class="field"><label for="newPass">New passphrase</label><input class="input" id="newPass" type="password" autocomplete="new-password" required minlength="12"><div class="strength-track"><div id="strengthBar" class="strength-bar"></div></div><small id="strengthText">Enter at least 12 characters.</small></div><div class="field"><label for="confirmPass">Confirm passphrase</label><input class="input" id="confirmPass" type="password" autocomplete="new-password" required></div><label class="inline"><input id="showPass" type="checkbox"> Show passphrase</label><div class="notice"><strong>Gathered cannot recover your passphrase.</strong> If you forget it and do not have another way to unlock your data, your encrypted data cannot be recovered.</div><label class="inline"><input id="ackRecovery" type="checkbox" required> I understand that Gathered cannot recover my data.</label><div id="setupError" class="warning" role="alert"></div><button class="btn primary block">Encrypt and Continue</button></form>`);bindSetup();}
 function bindStrength(input,bar,text){const update=()=>{const result=estimatePassphrase(input.value);bar.style.width=`${Math.min(100,result.bits/70*100)}%`;bar.className=`strength-bar ${result.label.toLowerCase()}`;text.textContent=`${result.label} · estimated ${result.bits} bits. Longer memorable phrases are best.`;};input.addEventListener('input',update);update();}
-function bindSetup(){const form=document.getElementById('securitySetup'),p=document.getElementById('newPass'),c=document.getElementById('confirmPass');bindStrength(p,document.getElementById('strengthBar'),document.getElementById('strengthText'));document.getElementById('showPass').onchange=e=>{p.type=c.type=e.target.checked?'text':'password';};form.onsubmit=async e=>{e.preventDefault();const error=document.getElementById('setupError'),strength=estimatePassphrase(p.value);if(!strength.acceptable){error.textContent='Choose a stronger passphrase of at least 12 characters.';return;}if(p.value!==c.value){error.textContent='Passphrases do not match.';return;}const button=form.querySelector('button');button.disabled=true;button.textContent='Encrypting…';try{const initial=migrateState(cryptoSession.legacy||state),made=await makeEnvelope(initial,p.value);await dbPut(ENVELOPE_KEY,made.envelope);const verified=await unlockEnvelope(await dbGet(ENVELOPE_KEY),p.value);cryptoSession={dek:verified.dek,envelope:made.envelope,mode:'unlocked',legacy:null};state=verified.state;await dbDelete(STATE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);location.hash=state.group?'#home':'';render();}catch{error.textContent='Encryption setup could not be completed. Your existing data was not removed.';button.disabled=false;button.textContent='Encrypt and Continue';}};}
-function lockScreen(message=''){document.getElementById('app').innerHTML=securityFrame('Unlock Gathered',`<form id="unlockForm" class="card form"><p class="subtle">Enter your app-wide passphrase to decrypt your data on this device.</p><div class="field"><label for="unlockPass">Passphrase</label><input class="input" id="unlockPass" type="password" autocomplete="current-password" required autofocus></div><label class="inline"><input id="showUnlock" type="checkbox"> Show passphrase</label><div id="unlockError" class="warning" role="alert">${esc(message)}</div><button class="btn primary block">Unlock</button></form>`);const form=document.getElementById('unlockForm'),p=document.getElementById('unlockPass');document.getElementById('showUnlock').onchange=e=>p.type=e.target.checked?'text':'password';form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('button');btn.disabled=true;btn.textContent='Unlocking…';try{const unlocked=await unlockEnvelope(cryptoSession.envelope,p.value);cryptoSession.dek=unlocked.dek;cryptoSession.mode='unlocked';state=unlocked.state;location.hash=state.group?'#home':'';render();}catch{lockScreen('Incorrect passphrase');}};}
+function bindSetup(){const form=document.getElementById('securitySetup'),p=document.getElementById('newPass'),c=document.getElementById('confirmPass');bindStrength(p,document.getElementById('strengthBar'),document.getElementById('strengthText'));document.getElementById('showPass').onchange=e=>{p.type=c.type=e.target.checked?'text':'password';};form.onsubmit=async e=>{e.preventDefault();const error=document.getElementById('setupError'),strength=estimatePassphrase(p.value);if(!strength.acceptable){error.textContent='Choose a stronger passphrase of at least 12 characters.';return;}if(p.value!==c.value){error.textContent='Passphrases do not match.';return;}const button=form.querySelector('button');button.disabled=true;button.textContent='Encrypting…';try{const initial=migrateState(cryptoSession.legacy||state),made=await makeEnvelope(initial,p.value);await dbPut(ENVELOPE_KEY,made.envelope);const verified=await unlockEnvelope(await dbGet(ENVELOPE_KEY),p.value);cryptoSession={dek:verified.dek,envelope:made.envelope,mode:'unlocked',legacy:null};state=verified.state;await createUnlockSession(verified.dek);await dbDelete(STATE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);location.hash=state.group?'#home':'';render();}catch{error.textContent='Encryption setup could not be completed. Your existing data was not removed.';button.disabled=false;button.textContent='Encrypt and Continue';}};}
+function lockScreen(message=''){document.getElementById('app').innerHTML=securityFrame('Unlock Gathered',`<form id="unlockForm" class="card form"><p class="subtle">Enter your app-wide passphrase to decrypt your data on this device.</p><div class="notice"><strong>Trusted for two hours.</strong> This is an absolute window from authentication, not extended by activity. Anyone using this unlocked browser profile can reopen Gathered during that time.</div><div class="field"><label for="unlockPass">Passphrase</label><input class="input" id="unlockPass" type="password" autocomplete="current-password" required autofocus></div><label class="inline"><input id="showUnlock" type="checkbox"> Show passphrase</label><div id="unlockError" class="warning" role="alert">${esc(message)}</div><button class="btn primary block">Unlock</button></form>`);const form=document.getElementById('unlockForm'),p=document.getElementById('unlockPass');document.getElementById('showUnlock').onchange=e=>p.type=e.target.checked?'text':'password';form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('button');btn.disabled=true;btn.textContent='Unlocking…';try{const unlocked=await unlockEnvelope(cryptoSession.envelope,p.value);cryptoSession.dek=unlocked.dek;cryptoSession.mode='unlocked';state=unlocked.state;await createUnlockSession(unlocked.dek);location.hash=state.group?'#home':'';render();}catch{lockScreen('Incorrect passphrase');}};}
 
 const baseRender=render;
 render=function(){if(cryptoSession.mode==='loading')return;if(cryptoSession.mode==='setup'){setupScreen();return;}if(cryptoSession.mode==='locked'){lockScreen();return;}baseRender();};
@@ -127,22 +204,22 @@ const oldEntryDetail=entryDetail;
 entryDetail=function(id){const entry=state.entries.find(e=>e.id===id);let html=oldEntryDetail(id);if(entry)html=html.replace(`<div class="eyebrow">${fmtDate(entry.date)}</div>`,`<div class="eyebrow">${sessionLabel(entry.sessionType)} · ${fmtDate(entry.date)}</div>`);return html;};
 
 const oldSettingsPage=settingsPage,oldBindSettings=bindSettings;
-settingsPage=function(){let html=oldSettingsPage();return html.replace('</div><div class="notice section">',`<div class="settings-row"><div><strong>Change Passphrase</strong><div class="subtle mini">Re-wraps your data key; your data remains intact.</div></div><button class="btn small secondary" id="changePassphrase">Change</button></div><div class="settings-row"><div><strong>Device Unlock</strong><div class="subtle mini">Available only when WebAuthn PRF and platform verification are securely supported.</div></div><button class="btn small ghost" disabled title="Secure PRF capability is not available or has not been verified">Unavailable</button></div><div class="settings-row"><div><strong>Lock Gathered</strong><div class="subtle mini">Clears decrypted data and keys from this tab.</div></div><button class="btn small primary" id="lockGathered">Lock</button></div></div><div class="notice section">`).replace('Export backup','Export encrypted backup').replace('Import backup','Import encrypted backup');};
-bindSettings=function(){oldBindSettings();document.getElementById('lockGathered').onclick=async()=>{clearTimeout(draftTimer);await saveChain;state=defaultState();cryptoSession.dek=null;cryptoSession.mode='locked';location.hash='';render();};document.getElementById('changePassphrase').onclick=()=>changePassphraseDialog();document.getElementById('resetApp').onclick=async()=>{if((await appModal.confirm('Reset Gathered? An encrypted safety backup will download first, then all local Gathered data will be deleted.',{title:'Reset Gathered',confirmLabel:'Reset',destructive:true})).confirmed){await downloadBackup('pre-reset',false);await dbDelete(ENVELOPE_KEY);await dbDelete(STATE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);state=defaultState();cryptoSession={dek:null,envelope:null,mode:'setup',legacy:null};location.hash='';render();}};const input=document.getElementById('importData');input.onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.backupFormat==='gathered-encrypted-backup'&&data.envelope){const passResult=await appModal.password("Enter this backup's passphrase.",{title:'Unlock backup',label:'Backup passphrase',required:true,confirmLabel:'Unlock'});if(!passResult.confirmed)return;const pass=passResult.value;const restored=await unlockEnvelope(data.envelope,pass);if(!(await appModal.confirm(`Restore encrypted backup for “${restored.state.group?.name||'Gathered'}”? Your current encrypted data will be exported first.`,{title:'Restore backup',confirmLabel:'Restore',destructive:true})).confirmed)return;await downloadBackup('pre-import',false);state=restored.state;await saveState();location.hash='#home';render();toast('Encrypted backup restored');return;}const check=validateBackup(data);if(!check.valid)throw new Error(check.errors.join('\n'));if(!(await appModal.confirm('This is an older unencrypted backup. Import it and immediately protect it with your current Gathered encryption?',{title:'Import legacy backup',confirmLabel:'Import',destructive:true})).confirmed)return;await downloadBackup('pre-import',false);state=migrateState(data);await saveState();location.hash='#home';render();toast('Legacy backup imported and encrypted');}catch{await appModal.error('The backup could not be decrypted or validated. Check its passphrase and file.',{title:'Restore failed'});}};};
+settingsPage=function(){let html=oldSettingsPage();return html.replace('</div><div class="notice section">',`<div class="settings-row"><div><strong>Change Passphrase</strong><div class="subtle mini">Re-wraps your data key; your data remains intact.</div></div><button class="btn small secondary" id="changePassphrase">Change</button></div><div class="settings-row"><div><strong>Device Unlock</strong><div class="subtle mini">Available only when WebAuthn PRF and platform verification are securely supported.</div></div><button class="btn small ghost" disabled title="Secure PRF capability is not available or has not been verified">Unavailable</button></div><div class="settings-row"><div><strong>Lock Gathered</strong><div class="subtle mini">Immediately revokes the trusted session in every open tab.</div></div><button class="btn small primary" id="lockGathered">Lock</button></div></div><div class="notice section">`).replace('Export backup','Export encrypted backup').replace('Import backup','Import encrypted backup');};
+bindSettings=function(){oldBindSettings();document.getElementById('lockGathered').onclick=()=>lockGathered();document.getElementById('changePassphrase').onclick=()=>changePassphraseDialog();document.getElementById('resetApp').onclick=async()=>{if((await appModal.confirm('Reset Gathered? An encrypted safety backup will download first, then all local Gathered data will be deleted.',{title:'Reset Gathered',confirmLabel:'Reset',destructive:true})).confirmed){await downloadBackup('pre-reset',false);await clearUnlockSession();await dbDelete(ENVELOPE_KEY);await dbDelete(STATE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);state=defaultState();cryptoSession={dek:null,envelope:null,mode:'setup',legacy:null};location.hash='';render();}};const input=document.getElementById('importData');input.onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.backupFormat==='gathered-encrypted-backup'&&data.envelope){const passResult=await appModal.password("Enter this backup's passphrase.",{title:'Unlock backup',label:'Backup passphrase',required:true,confirmLabel:'Unlock'});if(!passResult.confirmed)return;const pass=passResult.value;const restored=await unlockEnvelope(data.envelope,pass);if(!(await appModal.confirm(`Restore encrypted backup for “${restored.state.group?.name||'Gathered'}”? Your current encrypted data will be exported first.`,{title:'Restore backup',confirmLabel:'Restore',destructive:true})).confirmed)return;await downloadBackup('pre-import',false);await clearUnlockSession();await dbPut(ENVELOPE_KEY,data.envelope);cryptoSession={dek:restored.dek,envelope:data.envelope,mode:'unlocked',legacy:null};state=restored.state;await createUnlockSession(restored.dek);location.hash='#home';render();toast('Encrypted backup restored');return;}const check=validateBackup(data);if(!check.valid)throw new Error(check.errors.join('\n'));if(!(await appModal.confirm('This is an older unencrypted backup. Import it and immediately protect it with your current Gathered encryption?',{title:'Import legacy backup',confirmLabel:'Import',destructive:true})).confirmed)return;await downloadBackup('pre-import',false);state=migrateState(data);await saveState();location.hash='#home';render();toast('Legacy backup imported and encrypted');}catch{await appModal.error('The backup could not be decrypted or validated. Check its passphrase and file.',{title:'Restore failed'});}};};
 async function changePassphraseDialog(){
   const currentResult=await appModal.password('Enter your current passphrase.',{title:'Change passphrase',label:'Current passphrase',required:true,confirmLabel:'Continue'});if(!currentResult.confirmed)return;
   const nextResult=await appModal.password('Use at least 12 characters and a long, memorable phrase.',{title:'Choose a new passphrase',label:'New passphrase',required:true,confirmLabel:'Continue'});if(!nextResult.confirmed)return;
   if(!estimatePassphrase(nextResult.value).acceptable){await appModal.error('Choose a stronger passphrase.',{title:'Passphrase too weak'});return;}
   const confirmation=await appModal.password('Enter the new passphrase again.',{title:'Confirm new passphrase',label:'Confirm passphrase',required:true,confirmLabel:'Change passphrase'});if(!confirmation.confirmed)return;
   if(nextResult.value!==confirmation.value){await appModal.error('Passphrases do not match.',{title:'Passphrase not changed'});return;}
-  try{const {dek}=await unlockEnvelope(cryptoSession.envelope,currentResult.value);const salt=randomBytes(16),kek=await deriveKek(nextResult.value,salt),wrapped=await crypto.subtle.wrapKey('raw',dek,kek,'AES-KW');const candidate={...cryptoSession.envelope,kdf:{name:'PBKDF2',hash:'SHA-256',iterations:KDF_ITERATIONS,salt:b64(salt)},wrappedDek:b64(wrapped)};await dbPut(ENVELOPE_KEY,candidate);await unlockEnvelope(await dbGet(ENVELOPE_KEY),nextResult.value);cryptoSession.envelope=candidate;toast('Passphrase changed');}catch{await appModal.error('Incorrect current passphrase. No changes were made.',{title:'Passphrase not changed'});}
+  try{const {dek}=await unlockEnvelope(cryptoSession.envelope,currentResult.value);const salt=randomBytes(16),kek=await deriveKek(nextResult.value,salt),wrapped=await crypto.subtle.wrapKey('raw',dek,kek,'AES-KW');const candidate={...cryptoSession.envelope,kdf:{name:'PBKDF2',hash:'SHA-256',iterations:KDF_ITERATIONS,salt:b64(salt)},wrappedDek:b64(wrapped)};await dbPut(ENVELOPE_KEY,candidate);await unlockEnvelope(await dbGet(ENVELOPE_KEY),nextResult.value);cryptoSession.envelope=candidate;await lockGathered();toast('Passphrase changed — unlock again to start a new trusted session');}catch{await appModal.error('Incorrect current passphrase. No changes were made.',{title:'Passphrase not changed'});}
 }
 
 // Backups export the same authenticated encrypted envelope; no user content is serialized in plaintext.
 downloadBackup=async function(label='backup',mark=true){if(mark){state.settings.lastBackupAt=new Date().toISOString();await saveState();}await saveChain;const backup={backupFormat:'gathered-encrypted-backup',backupVersion:1,exportedAt:new Date().toISOString(),envelope:cryptoSession.envelope};const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=backupFilename(label);document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
 
 APP_ASSETS.push('crypto.js');
-window.GatheredTest={estimatePassphrase,encryptStateSnapshot,migrateState,sessionLabel};
+window.GatheredTest={estimatePassphrase,encryptStateSnapshot,migrateState,sessionLabel,UNLOCK_TTL_MS,createUnlockSession,restoreUnlockSession,clearUnlockSession,validUnlockRecord,lockGathered};
 
 function flushDraftSave(){if(cryptoSession.mode==='unlocked'&&cryptoSession.dek){clearTimeout(draftTimer);saveState().catch(()=>{});}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushDraftSave();});
