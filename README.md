@@ -8,7 +8,7 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 - Member create / view / edit / delete flows
 - Member contact info, birthday, role, notes, and longitudinal timeline
 - Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
-- Automatic Scripture text in the selected translation (including NIV) at the start of each new session journal, using a user-provided YouVersion API key
+- Automatic Scripture text through either a user-provided YouVersion key or the application-owned licensed proxy, plus an opt-in public-domain KJV fallback
 - Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
 - Persistent prayer lifecycle from initial request through updates and answered prayer
 - Follow-up/action items with owner, due date, and completion status
@@ -46,10 +46,12 @@ Then open `http://localhost:8080`.
 
 ## Deploy
 
-The app is static and can be deployed to GitHub Pages, Netlify, Cloudflare Pages, Vercel, or another HTTPS static host. No build step is required.
+The PWA can still be deployed statically, but automatic licensed text then requires a user's own authorized key. To provide application-owned licensed access, deploy `api/scripture.js` on a host supporting Node serverless functions and set `YOUVERSION_API_KEY`. Optionally set `SCRIPTURE_ALLOWED_TRANSLATIONS` (defaults to `NIV`), `SCRIPTURE_RATE_LIMIT` (defaults to 30 requests/minute/IP), and the license-required `SCRIPTURE_COPYRIGHT_NOTICE`. The browser sends only a normalized passage identifier and translation to this endpoint; the application credential remains in the server environment.
 
 The **Update App** button refreshes files from the app's deployed origin. When deployed from this repository (for example with GitHub Pages), that effectively discards the current cached app shell and downloads the latest deployed repository version.
 
 ## YouVersion links
 
 Gathered uses standard `bible.com/bible/{versionId}/{passage}` URLs. Mobile operating systems may hand these URLs to the installed YouVersion Bible app through universal/app-link association; otherwise the passage opens on bible.com.
+
+Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. A user may affirmatively choose the KJV fallback served by [bible-api.com](https://bible-api.com/), whose API documentation identifies its default King James Version text as public domain; the inserted text is labeled accordingly.
