@@ -124,7 +124,8 @@ function parseScripture(reference, translation='NIV') {
   const bookRaw=match[1].toLowerCase().replace(/\./g,'').trim(); const code=BOOKS[bookRaw]; if(!code)return null;
   const chapter=match[2], verses=match[3], tr=TRANSLATIONS[translation]||TRANSLATIONS.NIV;
   const locator=verses?`${code}.${chapter}.${verses}.${tr.label}`:`${code}.${chapter}.${tr.label}`;
-  return {url:`https://www.bible.com/bible/${tr.id}/${locator}`,code,chapter,verses};
+  const canonicalReference=`${match[1]} ${chapter}${verses?`:${verses}`:''}`;
+  return {url:`https://www.bible.com/bible/${tr.id}/${locator}`,code,chapter,verses,canonicalReference};
 }
 
 function scripturePassageId(reference,translation) {
@@ -157,11 +158,13 @@ function createScriptureProvider({userApiKey='',proxyEndpoint=SCRIPTURE_PROXY_EN
       return normalizeScriptureResponse(await response.json(),reference,translation);
     },
     async fetchPublicDomain(reference,signal) {
-      const response=await fetch(`${KJV_PUBLIC_DOMAIN_API}${encodeURIComponent(reference)}?translation=kjv`,{signal});
+      const parsed=parseScripture(reference,'KJV');
+      if(!parsed)throw new Error('Unsupported translation or passage');
+      const response=await fetch(`${KJV_PUBLIC_DOMAIN_API}${encodeURIComponent(parsed.canonicalReference)}?translation=kjv`,{signal});
       if(!response.ok)throw new Error(`KJV request failed (${response.status})`);
       const passage=await response.json(),text=String(passage.text||'').replace(/\s+/g,' ').trim();
       if(!text)throw new Error('Scripture text was empty');
-      return {text:`${passage.reference||reference} (KJV)\n${text}`,notice:'King James Version (KJV) — public domain.'};
+      return {text:`${passage.reference||parsed.canonicalReference} (KJV)\n${text}`,notice:'King James Version (KJV) — public domain.'};
     }
   };
 }

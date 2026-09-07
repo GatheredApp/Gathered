@@ -27,6 +27,29 @@ test('authorized proxy receives only normalized passage id and translation',asyn
   assert.equal(request.url,'/api/scripture');
 });
 
+test('public-domain provider normalizes Unicode ranges and returns attributed KJV text',async()=>{
+  let request;
+  const api=loadClient(async(url,options)=>{request={url,options};return{ok:true,json:async()=>({reference:'James 1:19-20',text:' Wherefore, my beloved brethren,  let every man be swift to hear. '})}});
+  const signal=new AbortController().signal;
+
+  const result=await api.createScriptureProvider().fetchPublicDomain('James 1:19–20',signal);
+
+  const requestedUrl=new URL(request.url);
+  assert.equal(decodeURIComponent(requestedUrl.pathname.slice(1)),'James 1:19-20');
+  assert.equal(requestedUrl.searchParams.get('translation'),'kjv');
+  assert.equal(request.options.signal,signal);
+  assert.equal(result.text,'James 1:19-20 (KJV)\nWherefore, my beloved brethren, let every man be swift to hear.');
+  assert.equal(result.notice,'King James Version (KJV) — public domain.');
+});
+
+test('public-domain provider rejects invalid references before requesting',async()=>{
+  let requested=false;
+  const api=loadClient(async()=>{requested=true;return{ok:true,json:async()=>({})}});
+
+  await assert.rejects(api.createScriptureProvider().fetchPublicDomain('Not a passage'),/Unsupported translation or passage/);
+  assert.equal(requested,false);
+});
+
 test('no proxy provider is distinguished and unsupported translations are rejected',async()=>{
   const api=loadClient(async()=>({ok:false,status:503,json:async()=>({})}));
   await assert.rejects(api.fetchScriptureText('John 3:16','NIV',{}),error=>error.code==='NO_PROVIDER');
@@ -48,4 +71,3 @@ test('editor requires opt-in KJV and preserves journal notes and stale reference
   assert.match(source,/scripture\.value\.trim\(\)!==reference/);
   assert.doesNotMatch(source,/bible\.com[^`]*fetch/);
 });
-
