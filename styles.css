@@ -153,6 +153,7 @@ p { line-height: 1.5; }
 }
 .modal-description { white-space: pre-line; }
 .modal-field { text-align: left; }
+.modal-field[hidden] { display: none; }
 .modal-error { color: var(--danger, #9d2f2f); font-weight: 700; text-align: left; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .modal-actions .btn { min-width: 96px; }
