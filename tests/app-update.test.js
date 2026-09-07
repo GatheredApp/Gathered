@@ -25,3 +25,11 @@ test('an accessible update prompt provides update and dismiss actions', () => {
   assert.match(index, /id="installUpdate"[^>]*>Update App</);
   assert.match(index, /id="dismissUpdate"[^>]*>Not now</);
 });
+
+test('accepting an update hides the modal and performs a cache-busted refresh', () => {
+  assert.match(app, /install\?\.addEventListener\('click',async\(\)=>\{\s*modal\.hidden=true;/);
+  assert.match(app, /async function installLatestApp/);
+  assert.match(app, /caches\.delete/);
+  assert.match(app, /getRegistrations\(\)/);
+  assert.match(app, /location\.replace\(`\.\/\?gathered_update=\$\{stamp\}/);
+});
