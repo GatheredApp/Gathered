@@ -8,7 +8,7 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 - Member create / view / edit / delete flows
 - Member contact info, birthday, role, notes, and longitudinal timeline
 - Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
-- Automatic Scripture text through either a user-provided YouVersion key or the application-owned licensed proxy, plus an opt-in public-domain KJV fallback
+- Automatic Scripture text through the built-in public YouVersion application key, with an optional user-key override and an explicit opt-in YouVersion KJV fallback
 - Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
 - Persistent prayer lifecycle from initial request through updates and answered prayer
 - Follow-up/action items with owner, due date, and completion status
@@ -46,7 +46,11 @@ Then open `http://localhost:8080`.
 
 ## Deploy
 
-The PWA can still be deployed statically, but automatic licensed text then requires a user's own authorized key. To provide application-owned licensed access, deploy `api/scripture.js` on a host supporting Node serverless functions and set `YOUVERSION_API_KEY`. Optionally set `SCRIPTURE_ALLOWED_TRANSLATIONS` (defaults to `NIV`), `SCRIPTURE_RATE_LIMIT` (defaults to 30 requests/minute/IP), and the license-required `SCRIPTURE_COPYRIGHT_NOTICE`. The browser sends only a normalized passage identifier and translation to this endpoint; the application credential remains in the server environment.
+`public-config.js` defines `PUBLIC_YOUVERSION_APP_KEY` and is loaded before `app.js`. This is an **intentionally public browser configuration value**, not a secret: it is downloaded to every browser, cached for installed PWAs, and can be inspected by users. A project owner should place only the approved public application key there. Never place a confidential server credential in that file.
+
+Users may enter their own YouVersion key in Settings as an optional override. Only that override is part of encrypted user state and backup exports; the built-in public key remains application configuration and is never serialized into either. NIV is requested from YouVersion Bible ID `111`. On an authorization or translation-access failure, Gathered asks before trying KJV Bible ID `1` through the same API. This is not an independent fallback for a revoked key, YouVersion outage, CORS failure, timeout, or exhausted quota. Gathered does not bundle a KJV dataset; an outage-independent fallback would require a separately reviewed redistributable dataset or approved provider with its source and license documented here before release.
+
+The optional `api/scripture.js` server endpoint remains available for deployments that need it outside the browser flow. Configure its confidential credential with `YOUVERSION_API_KEY`, plus optional `SCRIPTURE_ALLOWED_TRANSLATIONS`, `SCRIPTURE_RATE_LIMIT`, and `SCRIPTURE_COPYRIGHT_NOTICE`; do not copy that server credential into `public-config.js`.
 
 The **Update App** button refreshes files from the app's deployed origin. When deployed from this repository (for example with GitHub Pages), that effectively discards the current cached app shell and downloads the latest deployed repository version.
 
@@ -54,4 +58,4 @@ The **Update App** button refreshes files from the app's deployed origin. When d
 
 Gathered uses standard `bible.com/bible/{versionId}/{passage}` URLs. Mobile operating systems may hand these URLs to the installed YouVersion Bible app through universal/app-link association; otherwise the passage opens on bible.com.
 
-Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. A user may affirmatively choose the KJV fallback served by [bible-api.com](https://bible-api.com/), whose API documentation identifies its default King James Version text as public domain; the inserted text is labeled accordingly.
+Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. Only an NIV authorization or translation-access response offers the user the authenticated YouVersion KJV fallback described above; the inserted text and saved translation are labeled KJV.

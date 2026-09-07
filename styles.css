@@ -159,6 +159,8 @@ p { line-height: 1.5; }
 .modal-actions .btn { min-width: 96px; }
 .detail-body { white-space: pre-wrap; line-height: 1.6; }
 .scripture-link { display: inline-flex; gap: 8px; align-items: center; padding: 11px 13px; border-radius: 13px; background: var(--surface-2); color: var(--brand); font-weight: 800; text-decoration: none; }
+.scripture-preview { margin-top: 12px; padding: 12px 14px; border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface-2); }
+.scripture-attribution { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .kicker { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .settings-row:last-child { border-bottom: 0; }

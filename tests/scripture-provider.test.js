@@ -19,10 +19,10 @@ test('user-key provider calls YouVersion and normalizes its response',async()=>{
   assert.equal(request.options.headers['X-YVP-App-Key'],'personal-key');
 });
 
-test('authorized proxy receives only normalized passage id and translation',async()=>{
+test('provider proxy receives only normalized passage id and translation',async()=>{
   let request;
   const api=loadClient(async(url,options)=>{request={url,options};return{ok:true,json:async()=>({reference:'John 3:16–17',text:'Plain text',notice:'Licensed'})}});
-  assert.equal(await api.fetchScriptureText('John 3:16-17','NIV',{}),'John 3:16–17 (NIV)\nPlain text');
+  assert.equal((await api.createScriptureProvider().fetch('John 3:16-17','NIV')).text,'John 3:16–17 (NIV)\nPlain text');
   assert.deepEqual(JSON.parse(request.options.body),{passageId:'JHN.3.16-JHN.3.17',translation:'NIV'});
   assert.equal(request.url,'/api/scripture');
 });
@@ -50,10 +50,10 @@ test('public-domain provider rejects invalid references before requesting',async
   assert.equal(requested,false);
 });
 
-test('no proxy provider is distinguished and unsupported translations are rejected',async()=>{
+test('explicit credential is required and unsupported translations are rejected',async()=>{
   const api=loadClient(async()=>({ok:false,status:503,json:async()=>({})}));
-  await assert.rejects(api.fetchScriptureText('John 3:16','NIV',{}),error=>error.code==='NO_PROVIDER');
-  await assert.rejects(api.fetchScriptureText('John 3:16','BOGUS',{}),/Unsupported translation/);
+  await assert.rejects(api.fetchScriptureText('John 3:16','NIV',''),error=>error.code==='NO_PROVIDER');
+  await assert.rejects(api.fetchScriptureText('John 3:16','BOGUS','fixture-key'),/Unsupported translation/);
 });
 
 test('request cancellation and API errors propagate without producing text',async()=>{
@@ -64,10 +64,25 @@ test('request cancellation and API errors propagate without producing text',asyn
   await assert.rejects(failed.fetchScriptureText('Psalm 23','NIV',{}),/500/);
 });
 
-test('editor requires opt-in KJV and preserves journal notes and stale references',()=>{
-  assert.match(source,/useKjvFallback/);
-  assert.match(source,/translation\.value='KJV'/);
-  assert.match(source,/if\(journal\.value===''/);
-  assert.match(source,/scripture\.value\.trim\(\)!==reference/);
-  assert.doesNotMatch(source,/bible\.com[^`]*fetch/);
+test('editor implements credential precedence, opt-in fallback, note replacement and attribution',()=>{
+  assert.match(source,/youVersionApiKey\?\.trim\(\)\|\|globalThis\.PUBLIC_YOUVERSION_APP_KEY/);
+  assert.match(source,/appModal\.confirm/);
+  assert.match(source,/requestedTranslation==='NIV'&&error\.code==='TRANSLATION_ACCESS'/);
+  assert.match(source,/if\(!confirmed/);
+  assert.match(source,/fetchScripturePassage\(reference,'KJV'/);
+  assert.match(source,/lastVerseBlock&&journal\.value\.startsWith\(lastVerseBlock\)/);
+  assert.match(source,/translation\.value=selectedTranslation/);
+  assert.match(source,/scripture-attribution/);
+  assert.match(source,/fallbackError\.name!=='AbortError'/);
+});
+
+test('browser configuration is loaded and precached without copying it into state',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const sw=fs.readFileSync(path.join(__dirname,'..','sw.js'),'utf8');
+  const config=fs.readFileSync(path.join(__dirname,'..','public-config.js'),'utf8');
+  assert.ok(html.indexOf('public-config.js')<html.indexOf('app.js'));
+  assert.match(source,/APP_ASSETS[^\n]+public-config\.js/);
+  assert.match(sw,/APP_SHELL[^\n]+public-config\.js/);
+  assert.match(config,/intentionally public/);
+  assert.doesNotMatch(source,/settings:\{[^}]*PUBLIC_YOUVERSION_APP_KEY/);
 });
