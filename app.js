@@ -4,7 +4,7 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
@@ -143,10 +143,22 @@ function normalizeScriptureResponse(passage,reference,translation) {
   return {text:`${passage.data?.reference||passage.reference||reference} (${translation})\n${text}`,notice:passage.notice||passage.copyright||passage.data?.copyright||''};
 }
 
-function scriptureRequestError(response,translation) {
-  const error=new Error(`${translation} Scripture request failed (${response.status})`);
+async function scriptureRequestError(response,translation) {
+  let providerMessage='';
+  try{
+    const payload=await response.json();
+    providerMessage=String(payload?.message||payload?.error?.message||payload?.error||payload?.detail||'').trim();
+  }catch(_error){/* The HTTP status remains useful when YouVersion returns no JSON body. */}
+  const guidance=response.status===401
+    ?'YouVersion did not accept the selected application key.'
+    :response.status===403
+      ?'YouVersion accepted the request but denied access. Check the application’s NIV permission and allowed browser origin.'
+      :'';
+  const detail=providerMessage||guidance;
+  const error=new Error(`${translation} Scripture request failed (${response.status})${detail?`: ${detail}`:''}`);
   error.status=response.status;
   error.code=response.status===401||response.status===403?'TRANSLATION_ACCESS':'API_ERROR';
+  error.providerMessage=providerMessage;
   return error;
 }
 
@@ -156,8 +168,8 @@ function createScriptureProvider({userApiKey='',proxyEndpoint=SCRIPTURE_PROXY_EN
       const bible=TRANSLATIONS[translation],passageId=scripturePassageId(reference,translation);
       if(!bible||!passageId)throw new Error('Unsupported translation or passage');
       if(userApiKey){
-        const response=await fetch(`https://api.youversion.com/v1/bibles/${bible.id}/passages/${passageId}?format=text`,{headers:{'X-YVP-App-Key':userApiKey},signal});
-        if(!response.ok)throw scriptureRequestError(response,translation);
+        const response=await fetch(`https://api.youversion.com/v1/bibles/${bible.id}/passages/${encodeURIComponent(passageId)}?format=text`,{headers:{'Accept':'application/json','X-YVP-App-Key':userApiKey},signal});
+        if(!response.ok)throw await scriptureRequestError(response,translation);
         return normalizeScriptureResponse(await response.json(),reference,translation);
       }
       const response=await fetch(proxyEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId,translation}),signal});
@@ -259,7 +271,7 @@ function bindEntryEditor(id){
     }catch(error){if(error.name!=='AbortError'&&sequence===requestSequence){
       scriptureStatus.textContent=`Could not load ${requestedTranslation}: ${error.message}`;
       if(requestedTranslation==='NIV'&&error.code==='TRANSLATION_ACCESS'){
-        const {confirmed}=await appModal.confirm('NIV could not be loaded with the selected application key. Would you like to use KJV instead? The session translation will be changed to KJV.',{title:'Use KJV instead?',confirmLabel:'Use KJV'});
+        const {confirmed}=await appModal.confirm(`NIV could not be loaded with the selected application key.\n\n${error.message}\n\nWould you like to use KJV instead? The session translation will be changed to KJV.`,{title:'Use KJV instead?',confirmLabel:'Use KJV'});
         if(!confirmed||sequence!==requestSequence)return;
         scriptureStatus.textContent='Loading KJV…';
         try{
