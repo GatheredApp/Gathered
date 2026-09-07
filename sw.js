@@ -1,4 +1,4 @@
-const APP_VERSION='1.8.1';
+const APP_VERSION='1.9';
 const CACHE=`gathered-app-v${APP_VERSION}`;
 const APP_SHELL=['./','index.html','styles.css','enhancements.css','modal-controller.js','public-config.js','app.js','crypto.js','standalone-prayers.js','share.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));});
