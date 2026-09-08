@@ -13,7 +13,8 @@ const worker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
 test('home invitation uses the required copy directly after the existing tagline', () => {
   assert.match(app, /Capture the Word, remember your people, and carry prayer forward from week to week\.<\/p><\/section>/);
-  assert.match(source, /<\/p><button class="tour-invitation"[^>]*>Take a tour of the Gathered app\.<\/button><\/section>/);
+  assert.match(source, /<\/p><button class="tour-invitation"[^>]*>Take a tour of the Gathered app<\/button><\/section>/);
+  assert.match(css, /\.tour-invitation\{[^}]*justify-content:center[^}]*text-align:center/);
   assert.ok(html.indexOf('tour.js') > html.indexOf('crypto.js'));
 });
 

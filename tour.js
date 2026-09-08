@@ -10,7 +10,7 @@
   root.homePage = function () {
     return originalHomePage().replace(
       '</p></section>',
-      '</p><button class="tour-invitation" type="button" data-open-tour>Take a tour of the Gathered app.</button></section>'
+      '</p><button class="tour-invitation" type="button" data-open-tour>Take a tour of the Gathered app</button></section>'
     );
   };
 

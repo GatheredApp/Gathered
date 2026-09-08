@@ -5,9 +5,9 @@
 @media(max-width:520px){.choice-grid{grid-template-columns:1fr}.security-screen{padding:16px}.settings-row{align-items:flex-start;flex-wrap:wrap}}
 
 /* Feature tour */
-.tour-invitation{display:inline-flex;min-height:44px;align-items:center;margin:2px 0 0;padding:8px 0;border:0;background:transparent;color:var(--brand-2);font:inherit;font-size:14px;font-weight:800;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;cursor:pointer}
-.tour-invitation:hover{color:var(--brand)}
-.tour-invitation:focus-visible{outline:3px solid rgba(39,107,88,.25);outline-offset:3px;border-radius:6px}
+.tour-invitation{display:flex;min-height:44px;width:fit-content;align-items:center;justify-content:center;margin:8px auto 0;padding:8px 15px;border:1px solid rgba(39,107,88,.2);border-radius:999px;background:rgba(255,255,255,.45);color:var(--brand-2);font:inherit;font-size:13px;font-weight:800;text-align:center;cursor:pointer}
+.tour-invitation:hover{border-color:rgba(39,107,88,.35);background:rgba(255,255,255,.8);color:var(--brand)}
+.tour-invitation:focus-visible{outline:3px solid rgba(39,107,88,.25);outline-offset:3px}
 body.tour-open{overflow:hidden}
 .tour-overlay{position:fixed;inset:0;z-index:1300;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:rgba(14,35,28,.72);backdrop-filter:blur(10px)}
 .tour-overlay[hidden]{display:none}
