@@ -4,25 +4,18 @@ Gathered is a local-first Progressive Web App for small groups, Sunday worship, 
 
 ## Features
 
-- First-run small group setup
-- Member create / view / edit / delete flows
-- Member contact info, birthday, role, notes, and longitudinal timeline
-- Small Group, Sunday Worship, and Individual Devotion sessions with date, Scripture, journal, prayer requests, prayer updates, and follow-ups
-- Automatic NIV text through the built-in public YouVersion application key, with an optional user-key override and an explicit opt-in public-domain KJV fallback
-- Durable, debounced session auto-save with resumable **Draft Sessions** and explicit finalization
-- Persistent prayer lifecycle from initial request through updates and answered prayer
-- Follow-up/action items with owner, due date, and completion status
-- Global search across members, Scripture, journal notes, prayers, prayer updates, and follow-ups
-- YouVersion passage links for NIV, ESV, NKJV, NLT, and KJV
-- App-wide AES-256-GCM encryption, a random data-encryption key, and PBKDF2/AES-KW passphrase protection
-- IndexedDB persistence with crash-safe migration from earlier plaintext IndexedDB and `localStorage` schemas
-- Encrypted JSON backup/restore with legacy backup import and safety export before destructive actions
-- Full prayer-request editing and permanent deletion, including reference cleanup, alongside individual update editing/deletion
-- Backup-age reminder and last-backup status
-- Offline-capable service worker with network-first same-origin refresh behavior
-- Automatic service-worker version detection with an in-app update prompt
-- Settings **Update App** action that clears cached application files and re-downloads the latest deployed repository files while preserving IndexedDB data
-- Installable PWA manifest
+- **Gatherings and journaling:** Small Group, Sunday Worship, and Individual Devotion sessions bring together the date, Scripture, journal notes, prayers, and follow-ups. New sessions become encrypted, auto-saved **Draft Sessions** that can be resumed or deleted before explicit completion.
+- **Scripture:** Record a primary passage in NIV, ESV, NKJV, NLT, or KJV and open it in YouVersion. Gathered can insert licensed NIV text through a configured YouVersion key and, after an explicit opt-in when access is denied, public-domain KJV text. Manual text entry remains available.
+- **People:** Create, view, edit, and delete member profiles with role, email, phone, birthday, and notes. Member timelines connect their prayer requests, prayer updates, and follow-ups, with call, text, and email shortcuts where details are present.
+- **Persistent prayer tracking:** Create requests during a session or independently, add updates over time, edit requests and individual updates, mark prayers answered, and permanently delete requests or updates. Prayer histories retain links to the sessions where activity occurred.
+- **Privacy-conscious Scripture suggestions:** From a prayer, generate a prompt asking an AI assistant for relevant Bible passages and YouVersion links. Gathered never sends the prayer to AI itself; the user decides whether to copy or share the prompt and which assistant receives it.
+- **Follow-through:** Record follow-up/action items with an owner, due date, and open or completed status, connected to their originating session and member.
+- **Find and share:** Global search covers completed-session Scripture and journal notes, members, prayer requests and updates, and follow-ups. A native share action (with clipboard fallback) makes it easy to recommend Gathered.
+- **Local-first privacy:** Application data is stored in IndexedDB on the current device and encrypted with AES-256-GCM. A random data key is protected by a PBKDF2/AES-KW passphrase envelope; manual lock, passphrase changes, and a two-hour trusted-browser session are supported. Secure device/biometric unlock is shown as unavailable unless a user-verifying WebAuthn PRF implementation can be safely provided; it is not currently enabled.
+- **Recovery and maintenance:** Export and restore encrypted JSON backups, import legacy backups, receive backup-age reminders, and create safety exports before destructive operations.
+- **Offline, installable PWA:** The cached app shell works offline, the manifest supports installation, and service-worker version detection offers an in-app update flow. Settings also provides an explicit **Update App** action that refreshes cached application files while preserving IndexedDB data.
+
+An interactive, mobile-friendly feature tour can be launched at any time from the Gathered home screen.
 
 ## Data model and privacy
 
