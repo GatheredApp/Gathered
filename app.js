@@ -4,8 +4,8 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.8.2';
-const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const APP_VERSION = '1.9.0';
+const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'app.js', 'scripture-prompt.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
   NIV: { id: 111, label: 'NIV' },
