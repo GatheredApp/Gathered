@@ -184,6 +184,7 @@ prayerDetail = function (id) {
       <div class="inline"><span class="pill ${p.status === 'answered' ? 'answered' : ''}">${p.status === 'answered' ? 'Answered' : 'Active'}</span><a class="btn small secondary" href="#prayer/${p.id}/edit">Update</a></div>
     </div>
     <div class="card flat"><div class="detail-body"><strong>${esc(p.text)}</strong></div><div class="meta">Started ${fmtDate(p.createdDate)}${p.answeredDate ? ` · Answered ${fmtDate(p.answeredDate)}` : ''}</div></div>
+    <button class="btn secondary block scripture-prompt-trigger" type="button" data-find-scripture="${esc(p.id)}">✦ Find Scripture with AI</button>
     <section class="section">
       <div class="section-title"><h2>Timeline</h2></div>
       <div class="timeline">
@@ -207,6 +208,8 @@ document.addEventListener('click', event => {
     deletePrayerUpdate(del.dataset.prayerId, del.dataset.deletePrayerUpdate);
   }
 });
+
+scripturePrompt?.bindScripturePromptUI(document);
 
 document.addEventListener('submit', async event => {
   if (event.target?.id !== 'standalonePrayerForm') return;

@@ -157,6 +157,11 @@ p { line-height: 1.5; }
 .modal-error { color: var(--danger, #9d2f2f); font-weight: 700; text-align: left; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .modal-actions .btn { min-width: 96px; }
+.scripture-prompt-card { width: min(680px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; text-align: left; }
+.scripture-prompt-text { min-height: 280px; font-size: 14px; user-select: text; }
+.scripture-prompt-trigger { margin-top: 12px; }
+.scripture-prompt-actions { margin-top: 14px; flex-wrap: wrap; }
+@media (max-width: 560px) { .scripture-prompt-actions .btn { flex: 1 1 calc(50% - 5px); } .scripture-prompt-actions .btn:first-child { flex-basis: 100%; order: 3; } }
 .detail-body { white-space: pre-wrap; line-height: 1.6; }
 .scripture-link { display: inline-flex; gap: 8px; align-items: center; padding: 11px 13px; border-radius: 13px; background: var(--surface-2); color: var(--brand); font-weight: 800; text-decoration: none; }
 .scripture-preview { margin-top: 12px; padding: 12px 14px; border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface-2); }

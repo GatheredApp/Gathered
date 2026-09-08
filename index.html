@@ -43,9 +43,26 @@
     </form>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div class="modal-overlay" id="scripturePromptModal" role="dialog" aria-modal="true" aria-labelledby="scripturePromptTitle" aria-describedby="scripturePromptDescription" hidden>
+    <div class="modal-card scripture-prompt-card">
+      <div class="card-header">
+        <div><div class="eyebrow">Prayer &amp; Scripture</div><h2 id="scripturePromptTitle">Find Scripture with AI</h2></div>
+        <button class="icon-btn" type="button" data-close-scripture-prompt aria-label="Close Scripture prompt">×</button>
+      </div>
+      <p class="subtle" id="scripturePromptDescription">Gathered can create a prompt from this prayer request that you can run through the AI assistant of your choice. Gathered does not send the prayer request to an AI service.</p>
+      <div class="field"><label for="scripturePromptText">Generated prompt</label><textarea class="textarea scripture-prompt-text" id="scripturePromptText" readonly></textarea></div>
+      <p class="subtle mini">Your prayer stays on this device unless you choose to copy or share this prompt.</p>
+      <div class="modal-actions scripture-prompt-actions">
+        <button class="btn ghost" type="button" data-close-scripture-prompt>Cancel</button>
+        <button class="btn secondary" id="copyScripturePrompt" type="button">Copy Prompt</button>
+        <button class="btn primary" id="shareScripturePrompt" type="button">Share Prompt</button>
+      </div>
+    </div>
+  </div>
   <script src="modal-controller.js" defer></script>
   <script src="public-config.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="scripture-prompt.js" defer></script>
   <script src="standalone-prayers.js" defer></script>
   <script src="share.js" defer></script>
   <script src="crypto.js" defer></script>
