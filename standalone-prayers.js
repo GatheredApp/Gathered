@@ -47,7 +47,7 @@ function renderPrayerUpdate(p, update) {
     <div class="timeline-dot"></div>
     <div>
       <div class="prayer-update-stamp">${esc(fmtUpdateTimestamp(update))}</div>
-      <div class="detail-body">${esc(update.text)}</div>
+      <div class="detail-body markdown-body">${renderMarkdown(update.text)}</div>
       ${update.entryId ? `<a class="mini-link" href="#entry/${update.entryId}">Open session</a>` : ''}
       <div class="prayer-update-actions">
         <button class="btn small ghost" type="button" data-edit-prayer-update="${esc(update.id || '')}" data-prayer-id="${esc(p.id)}">Edit</button>
@@ -183,7 +183,7 @@ prayerDetail = function (id) {
       <div><div class="eyebrow">Prayer history</div><h1>${esc(p.memberName || getMemberName(p.memberId, 'General / group'))}</h1></div>
       <div class="inline"><span class="pill ${p.status === 'answered' ? 'answered' : ''}">${p.status === 'answered' ? 'Answered' : 'Active'}</span><a class="btn small secondary" href="#prayer/${p.id}/edit">Update</a></div>
     </div>
-    <div class="card flat"><div class="detail-body"><strong>${esc(p.text)}</strong></div><div class="meta">Started ${fmtDate(p.createdDate)}${p.answeredDate ? ` · Answered ${fmtDate(p.answeredDate)}` : ''}</div></div>
+    <div class="card flat"><div class="detail-body markdown-body">${renderMarkdown(p.text)}</div><div class="meta">Started ${fmtDate(p.createdDate)}${p.answeredDate ? ` · Answered ${fmtDate(p.answeredDate)}` : ''}</div></div>
     <button class="btn secondary block scripture-prompt-trigger" type="button" data-find-scripture="${esc(p.id)}">✦ Find Scripture with AI</button>
     <section class="section">
       <div class="section-title"><h2>Timeline</h2></div>
