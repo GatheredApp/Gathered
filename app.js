@@ -4,7 +4,7 @@ const DB_VERSION = 1;
 const STATE_STORE = 'state';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'modal-controller.js', 'public-config.js', 'markdown.js', 'app.js', 'scripture-prompt.js', 'message-prompt.js', 'tour.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {
@@ -235,7 +235,7 @@ function entryEditor(id){
   const existing=id&&id!=='new'?state.entries.find(e=>e.id===id):null;
   const entry=existing||{id:uid('entry'),date:todayISO(),scripture:'',translation:state.settings.translation||'NIV',journal:'',prayerIds:[],followUpIds:[]};
   const seededFollowUps=existing?entryFollowUpIds(existing).map(getFollowUp).filter(Boolean):[];
-  return shell(`<div class="page"><div class="section-title"><div><div class="eyebrow">${existing?'Edit':'New'} Session</div><h1>${existing?'Update session':'Create session'}</h1></div>${existing?`<button class="btn small danger" id="deleteEntry">Delete</button>`:''}</div><form class="form" id="entryForm"><div class="card form flat"><div class="field"><label for="entryDate">Session date</label><input class="input" type="date" id="entryDate" value="${esc(entry.date)}" required></div><div class="field"><label for="scripture">Scripture</label><input class="input" id="scripture" value="${esc(entry.scripture)}" placeholder="e.g., John 3:16-18" required><small>Enter one primary passage. The YouVersion link always remains available; automatic NIV insertion requires licensed API access, or you can paste NIV text manually.</small></div><div class="field"><label for="translation">Bible translation</label><select class="select" id="translation">${Object.keys(TRANSLATIONS).map(k=>`<option ${entry.translation===k?'selected':''}>${k}</option>`).join('')}</select></div><div id="scripturePreview"></div><div id="scriptureStatus" class="subtle mini" role="status" aria-live="polite"></div></div><div class="card form flat"><div class="field"><label for="journal">Session journal</label><textarea class="textarea" id="journal" rows="9" placeholder="What stood out? What did the group discuss? What do you want to remember?">${esc(entry.journal)}</textarea></div></div><div class="card form flat"><div class="card-header"><div><h2>New prayer requests</h2><div class="subtle mini">Create durable requests that continue across future sessions.</div></div><button class="btn small secondary" type="button" id="addNewPrayer">＋ Add</button></div><div id="newPrayerRows" class="grid"></div></div><div class="card form flat"><div class="card-header"><div><h2>Prayer updates</h2><div class="subtle mini">Add progress to an existing request or mark it answered.</div></div><button class="btn small secondary" type="button" id="addPrayerUpdate">＋ Update</button></div><div id="prayerUpdateRows" class="grid"></div></div><div class="card form flat"><div class="card-header"><div><h2>Follow-ups</h2><div class="subtle mini">Capture actions, owners, and due dates from this session.</div></div><button class="btn small secondary" type="button" id="addFollowUp">＋ Add</button></div><div id="followUpRows" class="grid"></div></div><div class="form-actions"><a href="#${existing?'entry/'+existing.id:'home'}" class="btn ghost">Cancel</a><button class="btn primary" type="submit">Save Session</button></div></form></div>`,'entries');
+  return shell(`<div class="page"><div class="section-title"><div><div class="eyebrow">${existing?'Edit':'New'} Session</div><h1>${existing?'Update session':'Create session'}</h1></div>${existing?`<button class="btn small danger" id="deleteEntry">Delete</button>`:''}</div><form class="form" id="entryForm"><div class="card form flat"><div class="field"><label for="entryDate">Session date</label><input class="input" type="date" id="entryDate" value="${esc(entry.date)}" required></div><div class="field"><label for="scripture">Scripture</label><input class="input" id="scripture" value="${esc(entry.scripture)}" placeholder="e.g., John 3:16-18" required><small>Enter one primary passage. A YouVersion link will remain available, and you can choose when to retrieve the passage.</small></div><div class="field"><label for="translation">Bible translation</label><select class="select" id="translation">${Object.keys(TRANSLATIONS).map(k=>`<option ${entry.translation===k?'selected':''}>${k}</option>`).join('')}</select><small>Licensed insertion requires configured YouVersion access; an eligible NIV access error can offer the public-domain KJV fallback.</small></div><button class="btn secondary scripture-insert" type="button" id="insertScripture">Insert into Session Journal</button><div id="scripturePreview"></div><div id="scriptureStatus" class="subtle mini" role="status" aria-live="polite"></div></div><div class="card form flat"><div class="field"><label for="journal">Session journal</label><textarea class="textarea" id="journal" rows="9" placeholder="What stood out? What did the group discuss? What do you want to remember?">${esc(entry.journal)}</textarea></div></div><div class="card form flat"><div class="card-header"><div><h2>New prayer requests</h2><div class="subtle mini">Create durable requests that continue across future sessions.</div></div><button class="btn small secondary" type="button" id="addNewPrayer">＋ Add</button></div><div id="newPrayerRows" class="grid"></div></div><div class="card form flat"><div class="card-header"><div><h2>Prayer updates</h2><div class="subtle mini">Add progress to an existing request or mark it answered.</div></div><button class="btn small secondary" type="button" id="addPrayerUpdate">＋ Update</button></div><div id="prayerUpdateRows" class="grid"></div></div><div class="card form flat"><div class="card-header"><div><h2>Follow-ups</h2><div class="subtle mini">Capture actions, owners, and due dates from this session.</div></div><button class="btn small secondary" type="button" id="addFollowUp">＋ Add</button></div><div id="followUpRows" class="grid"></div></div><div class="form-actions"><a href="#${existing?'entry/'+existing.id:'home'}" class="btn ghost">Cancel</a><button class="btn primary" type="submit">Save Session</button></div></form></div>`,'entries');
 }
 
 function bindEntryEditor(id){
@@ -246,8 +246,8 @@ function bindEntryEditor(id){
   function addFollowUp(f={id:uid('follow'),text:'',memberId:'',dueDate:'',status:'open'}){const row=document.createElement('div');row.className='followup-row';row.dataset.id=f.id;row.innerHTML=`<textarea class="textarea followup-text" rows="2" placeholder="Follow-up or action item">${esc(f.text)}</textarea><div class="row-grid"><select class="select followup-member">${memberOptions(f.memberId)}</select><input class="input followup-due" type="date" value="${esc(f.dueDate||'')}"><select class="select followup-status"><option value="open" ${f.status!=='completed'?'selected':''}>Open</option><option value="completed" ${f.status==='completed'?'selected':''}>Completed</option></select><button type="button" class="icon-btn row-remove">×</button></div>`;followUpRows.appendChild(row);row.querySelector('.row-remove').onclick=()=>row.remove();}
   if(existing) entryFollowUpIds(existing).map(getFollowUp).filter(Boolean).forEach(addFollowUp);
   document.getElementById('addNewPrayer').onclick=()=>addNewPrayer(); document.getElementById('addPrayerUpdate').onclick=()=>addPrayerUpdate(); document.getElementById('addFollowUp').onclick=()=>addFollowUp();
-  const scripture=document.getElementById('scripture'),translation=document.getElementById('translation'),preview=document.getElementById('scripturePreview'),scriptureStatus=document.getElementById('scriptureStatus'),journal=document.getElementById('journal');
-  let scriptureTimer,scriptureRequest,requestSequence=0,lastVerseBlock='';
+  const scripture=document.getElementById('scripture'),translation=document.getElementById('translation'),insertScripture=document.getElementById('insertScripture'),preview=document.getElementById('scripturePreview'),scriptureStatus=document.getElementById('scriptureStatus'),journal=document.getElementById('journal');
+  let scriptureRequest,requestSequence=0,lastVerseBlock='',insertingScripture=false;
   const selectedCredential=()=>state.settings.youVersionApiKey?.trim()||globalThis.PUBLIC_YOUVERSION_APP_KEY?.trim()||'';
   const insertPassage=(result,selectedTranslation)=>{
     const notice=result.notice?.trim()||'';
@@ -255,14 +255,19 @@ function bindEntryEditor(id){
     if(lastVerseBlock&&journal.value.startsWith(lastVerseBlock))journal.value=block+journal.value.slice(lastVerseBlock.length);
     else journal.value=block+journal.value;
     lastVerseBlock=block;
+    const translationChanged=translation.value!==selectedTranslation;
     translation.value=selectedTranslation;
     preview.innerHTML=`<div class="scripture-preview"><strong>${esc(result.text.split('\n')[0])}</strong>${notice?`<div class="scripture-attribution">${esc(notice)}</div>`:''}</div>`;
+    journal.dispatchEvent(new Event('input',{bubbles:true}));
+    if(translationChanged)translation.dispatchEvent(new Event('change',{bubbles:true}));
   };
   const loadScripture=async()=>{
     const reference=scripture.value.trim();
-    if(!canSeedScripture(existing)||!parseScripture(reference,translation.value))return;
+    if(insertingScripture)return;
+    if(!parseScripture(reference,translation.value)){toast('Enter a valid Bible passage, such as Romans 8:28.');scripture.focus();return;}
     const requestedTranslation=translation.value,sequence=++requestSequence;
-    scriptureRequest?.abort();scriptureRequest=new AbortController();scriptureStatus.textContent='Adding Scripture to your journal…';
+    insertingScripture=true;insertScripture.disabled=true;insertScripture.textContent='Inserting…';
+    scriptureRequest=new AbortController();scriptureStatus.textContent='Adding Scripture to your journal…';
     try{
       const result=await fetchScripturePassage(reference,requestedTranslation,selectedCredential(),scriptureRequest.signal);
       if(sequence!==requestSequence||scripture.value.trim()!==reference||translation.value!==requestedTranslation)return;
@@ -281,9 +286,11 @@ function bindEntryEditor(id){
           scriptureStatus.textContent=`Scripture added in KJV.${result.notice?` ${result.notice}`:''}`;
         }catch(fallbackError){if(fallbackError.name!=='AbortError'&&sequence===requestSequence)scriptureStatus.textContent=`Could not load KJV: ${fallbackError.message}`;}
       }
-    }}
+    }}finally{
+      if(sequence===requestSequence){insertingScripture=false;insertScripture.disabled=false;insertScripture.textContent='Insert into Session Journal';}
+    }
   };
-  const updatePreview=()=>{const p=parseScripture(scripture.value,translation.value);preview.innerHTML=p?`<a class="scripture-link" href="${p.url}" target="_blank" rel="noopener">Open in YouVersion ↗</a>`:`<div class="subtle mini">Use a format like “Romans 8:28” or “Psalm 23”.</div>`;clearTimeout(scriptureTimer);requestSequence++;scriptureRequest?.abort();if(canSeedScripture(existing)&&p)scriptureTimer=setTimeout(loadScripture,500);else if(!p)scriptureStatus.textContent='';}; scripture.addEventListener('input',updatePreview);translation.addEventListener('change',updatePreview);updatePreview();
+  const updatePreview=()=>{const p=parseScripture(scripture.value,translation.value);preview.innerHTML=p?`<a class="scripture-link" href="${p.url}" target="_blank" rel="noopener">Open in YouVersion ↗</a>`:`<div class="subtle mini">Use a format like “Romans 8:28” or “Psalm 23”.</div>`;if(!p)scriptureStatus.textContent='';}; scripture.addEventListener('input',updatePreview);translation.addEventListener('change',updatePreview);insertScripture.addEventListener('click',loadScripture);updatePreview();
   document.getElementById('entryForm').onsubmit=async e=>{
     e.preventDefault();const scriptureVal=scripture.value.trim();if(!parseScripture(scriptureVal,translation.value)){toast('Check the Scripture format');scripture.focus();return;}
     const date=document.getElementById('entryDate').value, entryId=existing?.id||uid('entry');
