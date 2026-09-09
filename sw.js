@@ -1,4 +1,4 @@
-const APP_VERSION='1.14.0';
+const APP_VERSION='1.14.1';
 const CACHE=`gathered-app-v${APP_VERSION}`;
 const APP_SHELL=['./','index.html','styles.css','enhancements.css','diary.css','modal-controller.js','public-config.js','markdown.js','app.js','crypto.js','diary.js','standalone-prayers.js','scripture-prompt.js','message-prompt.js','share.js','tour.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));});
