@@ -55,3 +55,9 @@ The **Update App** button refreshes files from the app's deployed origin. When d
 Gathered uses standard `bible.com/bible/{versionId}/{passage}` URLs. Mobile operating systems may hand these URLs to the installed YouVersion Bible app through universal/app-link association; otherwise the passage opens on bible.com.
 
 Gathered never scrapes bible.com. If licensed retrieval is unavailable, the editor retains the link and supports manual NIV paste. Only an NIV authorization or translation-access response offers the user the independent public-domain KJV fallback described above; the inserted text and saved translation are labeled KJV.
+
+## Diary
+
+Diary is a private, chronological record alongside Gathered's sessions and prayers. Its **Day**, vertically stacked **7 Days**, and conventional **Month** views derive a calendar from completed sessions, prayer-request creation dates, and diary entries; session drafts and prayer updates are not duplicated into the calendar. Entries support safe rendered Markdown, freeform tags (including calendar filtering and global search), editing, and confirmed deletion.
+
+Photos and videos are stored locally in a dedicated IndexedDB store rather than in application-state JSON. Each attachment is authenticated and encrypted with the same unlocked AES-GCM data key as the diary text, and only encrypted attachment records are included in version 2 encrypted backups. Gathered never uploads diary content. Native browser storage quotas still apply—especially for large videos—and attachment failures leave an existing entry intact.
