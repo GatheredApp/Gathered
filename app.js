@@ -5,7 +5,7 @@ const STATE_STORE = 'state';
 const MEDIA_STORE = 'diaryMedia';
 const STATE_KEY = 'appState';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.16.0';
 const APP_ASSETS = ['./', 'index.html', 'styles.css', 'enhancements.css', 'diary.css', 'modal-controller.js', 'public-config.js', 'markdown.js', 'app.js', 'diary-image.js', 'diary.js', 'scripture-prompt.js', 'message-prompt.js', 'tour.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 const TRANSLATIONS = {

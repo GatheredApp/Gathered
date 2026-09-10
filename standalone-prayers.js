@@ -185,8 +185,8 @@ prayerDetail = function (id) {
     </div>
     <div class="card flat"><div class="detail-body markdown-body">${renderMarkdown(p.text)}</div><div class="meta">Started ${fmtDate(p.createdDate)}${p.answeredDate ? ` · Answered ${fmtDate(p.answeredDate)}` : ''}</div></div>
     <div class="ai-prompt-triggers">
-      <button class="btn secondary block ai-prompt-trigger scripture-prompt-trigger" type="button" data-find-scripture="${esc(p.id)}">✦ Find Scripture with AI</button>
-      <button class="btn secondary block ai-prompt-trigger" type="button" data-listen-message="${esc(p.id)}">✦ Listen to a Message with AI</button>
+      <button class="btn secondary block ai-prompt-trigger scripture-prompt-trigger" type="button" data-ai-source="prayer" data-find-scripture="${esc(p.id)}">✦ Find Scripture with AI</button>
+      <button class="btn secondary block ai-prompt-trigger" type="button" data-ai-source="prayer" data-listen-message="${esc(p.id)}">✦ Listen to a Message with AI</button>
     </div>
     <section class="section">
       <div class="section-title"><h2>Timeline</h2></div>

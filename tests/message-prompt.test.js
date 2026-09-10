@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { generateMessagePrompt, copyPrompt, sharePrompt, SHARE_TITLE } = require('../message-prompt.js');
+const { generateMessagePrompt, generateDiaryMessagePrompt, copyPrompt, sharePrompt, SHARE_TITLE } = require('../message-prompt.js');
 
 test('generates the pastoral message prompt from prayer text without an empty updates section', () => {
   const prompt = generateMessagePrompt({ text: 'Please pray for wisdom about a new job.', updates: [] });
@@ -34,6 +34,27 @@ test('includes the biblical, pastoral, accuracy, and read-aloud requirements', (
   assert.match(prompt, /Conclude with a short prayer of approximately 75–125 words/);
   assert.match(prompt, /sound natural when read aloud/);
   assert.match(prompt, /continuous pastoral message/);
+});
+
+test('generates a diary-specific pastoral prompt without leaking media or internal metadata', () => {
+  const prompt = generateDiaryMessagePrompt({ title: 'Looking ahead', date: '2026-09-10', body: 'I am hopeful and uncertain about moving.', tags: ['change'], media: [{ id: 'media-private', name: 'home.mov' }], id: 'entry-private', updatedAt: 'private-time' });
+  assert.match(prompt, /I have the following diary entry:/);
+  assert.match(prompt, /Title: Looking ahead/);
+  assert.match(prompt, /I am hopeful and uncertain about moving\./);
+  assert.doesNotMatch(prompt, /prayer request/i);
+  assert.match(prompt, /500–800 words/);
+  assert.match(prompt, /2–4 particularly relevant Bible passages/);
+  assert.match(prompt, /Do not claim to know God's specific plan/);
+  assert.match(prompt, /Do not promise a particular outcome/);
+  assert.match(prompt, /standard YouVersion link/);
+  assert.match(prompt, /voice or read-aloud functionality/);
+  assert.doesNotMatch(prompt, /media-private|home\.mov|entry-private|private-time/);
+});
+
+test('diary pastoral prompt omits an empty title', () => {
+  const prompt = generateMessagePrompt({ title: ' ', date: '2026-09-10', body: 'Just the entry body.' }, 'diary');
+  assert.doesNotMatch(prompt, /Title:/);
+  assert.match(prompt, /Just the entry body\./);
 });
 
 test('copy uses the Clipboard API and reports success', async () => {

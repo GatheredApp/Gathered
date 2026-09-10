@@ -47,12 +47,12 @@
   <div class="modal-overlay" id="scripturePromptModal" role="dialog" aria-modal="true" aria-labelledby="scripturePromptTitle" aria-describedby="scripturePromptDescription" hidden>
     <div class="modal-card ai-prompt-card scripture-prompt-card">
       <div class="card-header">
-        <div><div class="eyebrow">Prayer &amp; Scripture</div><h2 id="scripturePromptTitle">Find Scripture with AI</h2></div>
+        <div><div class="eyebrow" id="scripturePromptContext">Prayer &amp; Scripture</div><h2 id="scripturePromptTitle">Find Scripture with AI</h2></div>
         <button class="icon-btn" type="button" data-close-scripture-prompt aria-label="Close Scripture prompt">×</button>
       </div>
       <p class="subtle" id="scripturePromptDescription">Gathered can create a prompt from this prayer request that you can run through the AI assistant of your choice. Gathered does not send the prayer request to an AI service.</p>
       <div class="field"><label for="scripturePromptText">Generated prompt</label><textarea class="textarea ai-prompt-text scripture-prompt-text" id="scripturePromptText" readonly></textarea></div>
-      <p class="subtle mini">Your prayer stays on this device unless you choose to copy or share this prompt.</p>
+      <p class="subtle mini" id="scripturePromptPrivacy">Your prayer stays on this device unless you choose to copy or share this prompt.</p>
       <div class="modal-actions ai-prompt-actions scripture-prompt-actions">
         <button class="btn ghost" type="button" data-close-scripture-prompt>Cancel</button>
         <button class="btn secondary" id="copyScripturePrompt" type="button">Copy Prompt</button>
@@ -63,13 +63,13 @@
   <div class="modal-overlay" id="messagePromptModal" role="dialog" aria-modal="true" aria-labelledby="messagePromptTitle" aria-describedby="messagePromptDescription messagePromptReadAloud" hidden>
     <div class="modal-card ai-prompt-card">
       <div class="card-header">
-        <div><div class="eyebrow">Prayer &amp; Message</div><h2 id="messagePromptTitle">Listen to a Message with AI</h2></div>
+        <div><div class="eyebrow" id="messagePromptContext">Prayer &amp; Message</div><h2 id="messagePromptTitle">Listen to a Message with AI</h2></div>
         <button class="icon-btn" type="button" data-close-message-prompt aria-label="Close pastoral message prompt">×</button>
       </div>
       <p class="subtle" id="messagePromptDescription">Gathered can create a prompt asking an AI assistant to prepare a short pastoral message for this prayer request. Gathered does not send the prayer request to an AI service.</p>
       <p class="subtle mini" id="messagePromptReadAloud">After sharing the prompt, you can read the response or use your AI assistant's voice or read-aloud feature when available.</p>
       <div class="field"><label for="messagePromptText">Generated prompt</label><textarea class="textarea ai-prompt-text" id="messagePromptText" readonly></textarea></div>
-      <p class="subtle mini">Your prayer stays on this device unless you choose to copy or share this prompt.</p>
+      <p class="subtle mini" id="messagePromptPrivacy">Your prayer stays on this device unless you choose to copy or share this prompt.</p>
       <div class="modal-actions ai-prompt-actions">
         <button class="btn ghost" type="button" data-close-message-prompt>Cancel</button>
         <button class="btn secondary" id="copyMessagePrompt" type="button">Copy Prompt</button>
