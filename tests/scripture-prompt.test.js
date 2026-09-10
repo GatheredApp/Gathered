@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { generateScripturePrompt, copyPrompt, sharePrompt, SHARE_TITLE } = require('../scripture-prompt.js');
+const { generateScripturePrompt, generateDiaryScripturePrompt, copyPrompt, sharePrompt, SHARE_TITLE } = require('../scripture-prompt.js');
 
 test('generates a prompt containing prayer text without an updates section', () => {
   const prompt = generateScripturePrompt({ text: 'Please pray for wisdom about a new job.', updates: [] });
@@ -17,6 +17,25 @@ test('includes prayer updates in chronological order', () => {
     { text: 'Walking without assistance.', createdAt: '2026-03-01T10:00:00Z' }
   ] });
   assert.match(prompt, /Recent updates:\n\n- Surgery is scheduled\.\n- Physical therapy began\.\n- Walking without assistance\./);
+});
+
+test('generates a diary-specific Scripture prompt with optional title, date, body, and useful tags', () => {
+  const prompt = generateDiaryScripturePrompt({ title: 'A hard week', date: '2026-09-10', body: '**Work** has left me anxious, but I am grateful.', tags: ['work', 'gratitude'], media: [{ name: 'private.jpg' }], id: 'diary-secret', createdAt: 'internal' });
+  assert.match(prompt, /I have the following diary entry:/);
+  assert.match(prompt, /Title: A hard week/);
+  assert.match(prompt, /Date: 2026-09-10/);
+  assert.match(prompt, /\*\*Work\*\* has left me anxious/);
+  assert.match(prompt, /Relevant tags: work, gratitude/);
+  assert.doesNotMatch(prompt, /prayer request/i);
+  assert.match(prompt, /Do not invent or paraphrase Scripture/);
+  assert.match(prompt, /standard YouVersion Bible URLs/);
+  assert.doesNotMatch(prompt, /private\.jpg|diary-secret|internal/);
+});
+
+test('diary Scripture prompt omits an absent title cleanly', () => {
+  const prompt = generateScripturePrompt({ date: '2026-09-10', body: 'A titleless reflection.' }, 'diary');
+  assert.doesNotMatch(prompt, /Title:/);
+  assert.match(prompt, /A titleless reflection\./);
 });
 
 test('copy uses the Clipboard API and reports success', async () => {
